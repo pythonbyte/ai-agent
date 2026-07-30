@@ -1,0 +1,13 @@
+model: openai/gpt-4o-mini
+system_prompt: >
+  You are a helpful assistant with tools. Prefer tools for facts and
+  computation instead of guessing. Be clear and concise.
+max_tool_rounds: 5
+personality:
+  tone: professional
+  style: concise
+greeting: "Hello! I'm your tool-using assistant. Ask me to calculate, check the time, or take a note."
+tools:
+  - calculator
+  - current_time
+  - note
