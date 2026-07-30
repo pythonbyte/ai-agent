@@ -43,16 +43,7 @@ class WebSocketServer:
         connection = self._connections.get(agent_id)
         if connection is None:
             return
-        payload = json.dumps(
-            {
-                "agent_id": agent_id,
-                "kind": result.kind,
-                "message": result.message,
-                "tool_results": result.tool_results,
-                "rounds_used": result.rounds_used,
-            }
-        )
-        asyncio.create_task(self._safe_send(connection, payload))
+        asyncio.create_task(self._safe_send(connection, result.message))
 
     async def _safe_send(self, connection: ServerConnection, payload: str) -> None:
         try:
