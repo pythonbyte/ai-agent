@@ -37,5 +37,24 @@ class ConversationState(BaseModel):
         self.done = True
 
     def as_chat_dicts(self) -> list[dict[str, str]]:
-        """Flatten history for LLM providers that expect role/content dicts."""
-        return [{"role": m.role, "content": m.content} for m in self.messages]
+        """
+        Flatten history for OpenAI-compatible chat APIs (e.g. OpenRouter).
+
+        Domain role ``tool`` is mapped to ``user`` on the wire. OpenRouter
+        requires ``tool_call_id`` (and a preceding assistant ``tool_calls``)
+        for ``role: tool``; this agent uses a JSON ReAct loop, not native
+        function calling, so bare tool roles produce HTTP 400.
+        """
+        out: list[dict[str, str]] = []
+        for m in self.messages:
+            if m.role == "tool":
+                label = m.tool_name or "tool"
+                out.append(
+                    {
+                        "role": "user",
+                        "content": f"[Observation from {label}]\n{m.content}",
+                    }
+                )
+            else:
+                out.append({"role": m.role, "content": m.content})
+        return out

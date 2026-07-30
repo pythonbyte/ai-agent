@@ -98,7 +98,13 @@ class OpenRouterLLM:
 
         async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
             response = await client.post(self.base_url, headers=headers, json=payload)
-            response.raise_for_status()
+            if response.is_error:
+                # Surface provider body — OpenRouter 400s often explain invalid_prompt.
+                raise httpx.HTTPStatusError(
+                    f"{response.status_code} {response.reason_phrase}: {response.text}",
+                    request=response.request,
+                    response=response,
+                )
             data = response.json()
 
         try:

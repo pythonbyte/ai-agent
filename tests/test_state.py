@@ -29,3 +29,17 @@ class TestConversationState:
         state = ConversationState()
         state.tool_traces.append(ToolResult(tool_name="calculator", success=True, output="4"))
         assert state.tool_traces[0].output == "4"
+
+    def test_as_chat_dicts_maps_tool_role_to_user(self) -> None:
+        """OpenRouter rejects role=tool without tool_call_id / native tool_calls."""
+        state = ConversationState()
+        state.add_message("assistant", '{"kind":"call_tools"}')
+        state.add_message(
+            "tool",
+            '{"tool":"calculator","success":true,"output":"4"}',
+            tool_name="calculator",
+        )
+        wire = state.as_chat_dicts()
+        assert wire[1]["role"] == "user"
+        assert wire[1]["content"].startswith("[Observation from calculator]")
+        assert "calculator" in wire[1]["content"]

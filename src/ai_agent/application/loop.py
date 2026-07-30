@@ -145,7 +145,11 @@ async def run_tool_loop(
                 )
 
             state.add_message("assistant", decision.model_dump_json())
-            state.add_message("tool", "\n".join(observations))
+            # Stored as domain role "tool"; as_chat_dicts() maps to user for the API.
+            tool_label = (
+                decision.tool_calls[0].name if len(decision.tool_calls) == 1 else "tools"
+            )
+            state.add_message("tool", "\n".join(observations), tool_name=tool_label)
             continue
 
         message = decision.message or ("Conversation complete." if decision.kind == "done" else "")
