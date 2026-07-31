@@ -45,10 +45,11 @@ Everything below is **deterministic software around the model** (OpenRouter toda
 | **RAG as a tool** | Done | Local Chroma (+ in-memory tests); `ai-agent ingest --docs` | [`infrastructure/chroma_retriever.py`](src/ai_agent/infrastructure/chroma_retriever.py) |
 | **Multi-agent handoff** | Done | Coordinator → `message_agent` → researcher (sync ask + timeout) | [`orchestration/runtime.py`](src/ai_agent/orchestration/runtime.py) · [`config/agents/`](config/agents/) |
 | **Serving surfaces** | Done | Console CLI, WebSocket chat (`--server`), multi-agent demo | [`cli.py`](src/ai_agent/cli.py) · [`infrastructure/server.py`](src/ai_agent/infrastructure/server.py) |
-| **Guardrails (light)** | Done | URL scheme allowlist, path jail, AST calculator, typed config | `url_safety` · `workspace_fs` · `calculator` |
+| **Guardrails (light)** | Done | URL scheme allowlist, path jail, AST calculator, Python deny-list + subprocess timeout | `url_safety` · `workspace_fs` · `calculator` · `python_guard` |
 | **Provider portability** | Done | `LLMPort` + httpx OpenRouter adapter (no SDK lock-in) | [`infrastructure/llm.py`](src/ai_agent/infrastructure/llm.py) |
 | **Research Desk** | Done | Personal Operator persona + `brief` → cited markdown under `briefs/` | [`config/agents/operator.yaml`](config/agents/operator.yaml) · [`application/brief.py`](src/ai_agent/application/brief.py) |
 | **HITL approvals** | Done | `request_approval` tool + optional `brief --approve` (console Y/n) | [`tools/request_approval.py`](src/ai_agent/tools/request_approval.py) · [`infrastructure/approval.py`](src/ai_agent/infrastructure/approval.py) |
+| **Code execution** | Done | `run_python` — subprocess + AST deny-list (not full container sandbox) | [`tools/run_python.py`](src/ai_agent/tools/run_python.py) · [`application/python_guard.py`](src/ai_agent/application/python_guard.py) |
 | **Self-Harness (experimental)** | Scaffold | Mine failures → propose YAML patches → human `accept` after pytest | [`application/self_harness.py`](src/ai_agent/application/self_harness.py) |
 | **Context compaction** | — | Full history in window today | Roadmap |
 | **OS / container sandbox** | — | Scoped limits only (not Docker/Firecracker) | Roadmap |
@@ -173,6 +174,7 @@ uv run ai-agent harness accept patch_… -c config/agents/operator.yaml
 | `retrieve` | Semantic search over ingested docs (Chroma) |
 | `memory` | Durable key/value facts (SQLite) |
 | `calculator` | Safe AST arithmetic |
+| `run_python` | Run short Python snippets (subprocess + import/call deny-list) |
 | `current_time` | Clock / timezone |
 | `note` | Ephemeral scratchpad (demo) |
 | `message_agent` | Ask another runtime agent (multi-agent) |
@@ -199,6 +201,7 @@ sqlite_path: ".ai_agent/state.db"
 chroma_path: ".ai_agent/chroma"
 tools:
   - calculator
+  - run_python
   - web_search
   - http_get
   - workspace_search

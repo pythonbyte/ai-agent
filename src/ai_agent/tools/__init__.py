@@ -8,6 +8,7 @@ from ai_agent.application.registry import ToolRegistry
 from ai_agent.domain.ports import (
     AgentMessenger,
     ApprovalGate,
+    CodeExecutor,
     HttpFetcher,
     MemoryStore,
     Retriever,
@@ -15,12 +16,14 @@ from ai_agent.domain.ports import (
     WorkspaceReader,
 )
 from ai_agent.infrastructure.http_fetcher import HttpxFetcher
+from ai_agent.infrastructure.python_executor import SubprocessPythonExecutor
 from ai_agent.infrastructure.web_search import DuckDuckGoSearcher
 from ai_agent.infrastructure.workspace_fs import WorkspaceFS
 from ai_agent.tools.calculator import CalculatorTool
 from ai_agent.tools.datetime_tool import CurrentTimeTool
 from ai_agent.tools.http_get import HttpGetTool
 from ai_agent.tools.note import NoteTool
+from ai_agent.tools.run_python import RunPythonTool
 from ai_agent.tools.web_search import WebSearchTool
 from ai_agent.tools.workspace_search import WorkspaceSearchTool
 
@@ -29,6 +32,7 @@ __all__ = [
     "CurrentTimeTool",
     "HttpGetTool",
     "NoteTool",
+    "RunPythonTool",
     "WebSearchTool",
     "WorkspaceSearchTool",
     "build_default_registry",
@@ -46,6 +50,7 @@ def build_default_registry(
     messenger: AgentMessenger | None = None,
     messenger_sender_id: str = "coordinator",
     approval_gate: ApprovalGate | None = None,
+    code_executor: CodeExecutor | None = None,
 ) -> ToolRegistry:
     """
     Register built-in tools into a fresh registry.
@@ -56,6 +61,7 @@ def build_default_registry(
     registry.register(CalculatorTool())
     registry.register(CurrentTimeTool())
     registry.register(NoteTool())
+    registry.register(RunPythonTool(code_executor or SubprocessPythonExecutor()))
 
     fetcher = http_fetcher or HttpxFetcher()
     reader = workspace_reader or WorkspaceFS(workspace_root)

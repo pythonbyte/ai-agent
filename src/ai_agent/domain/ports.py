@@ -127,6 +127,24 @@ class ApprovalGate(Protocol):
         ...
 
 
+class CodeExecutionResult(BaseModel):
+    """Outcome of a sandboxed code run."""
+
+    success: bool
+    stdout: str = ""
+    stderr: str = ""
+    exit_code: int | None = None
+    timed_out: bool = False
+    error: str | None = None
+
+
+@runtime_checkable
+class CodeExecutor(Protocol):
+    """Execute a short code snippet and return captured I/O."""
+
+    async def run(self, code: str, *, timeout_seconds: float = 5.0) -> CodeExecutionResult: ...
+
+
 class IngestDocument(BaseModel):
     """Document payload for ingest pipelines."""
 

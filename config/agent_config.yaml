@@ -6,12 +6,13 @@ max_tool_rounds: 5
 personality:
   tone: professional
   style: concise
-greeting: "Hello! I'm your tool-using assistant. Ask me to calculate, search the web, check the time, search the workspace, or fetch a URL."
+greeting: "Hello! I'm your tool-using assistant. Ask me to calculate, run Python, search the web, check the time, search the workspace, or fetch a URL."
 workspace_root: "."
 sqlite_path: ".ai_agent/state.db"
 chroma_path: ".ai_agent/chroma"
 tools:
   - calculator
+  - run_python
   - current_time
   - note
   - http_get

@@ -86,6 +86,10 @@ Survivors are expected on the first baseline — many are equivalent mutations (
 
 **Chose a guarded scaffold, not unsupervised self-modification.** Failures are mined into `HarnessPatch` surfaces limited to YAML (`system_prompt` append, `max_tool_rounds`). Accept runs pytest and requires a human CLI step. Arbitrary Python edits and auto-merge are out of v0 — matches “study while touching code” without claiming AGI. Framing and reading list live in the README moonshot section.
 
+### Subprocess Python, not Docker
+
+**Chose a deny-listed subprocess for `run_python`.** Enough for local agent computation (math, transforms) with timeout and output caps. Not a multi-tenant sandbox — escalate to containers when running untrusted code at scale.
+
 ## What this is not
 
 - Not an observability platform
