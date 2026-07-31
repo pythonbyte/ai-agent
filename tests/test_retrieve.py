@@ -6,14 +6,14 @@ from pathlib import Path
 
 import pytest
 
-from ai_agent.application.registry import ToolRegistry
-from ai_agent.domain.models import AgentConfig, AgentDecision, Personality
-from ai_agent.domain.ports import IngestDocument, RetrievedChunk
-from ai_agent.infrastructure.chroma_retriever import (
+from ai_agent.adapters.chroma_retriever import (
     InMemoryRetriever,
     format_chunks,
     load_docs_folder,
 )
+from ai_agent.domain.models import AgentConfig, AgentDecision, Personality
+from ai_agent.domain.ports import IngestDocument, RetrievedChunk
+from ai_agent.harness.registry import ToolRegistry
 from ai_agent.tools.retrieve import RetrieveTool
 from tests.conftest import ScriptedLLM, decision_call_tools, make_agent
 

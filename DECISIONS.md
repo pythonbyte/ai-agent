@@ -14,11 +14,13 @@ This project implements that loop as a **generic tool-using agent**, not a speci
 
 | Layer | Responsibility |
 |---|---|
-| **Domain** | Models, `ConversationState`, `Tool` protocol, ports (`SessionStore`, `Retriever`, …) — no I/O |
-| **Application** | `Agent`, ReAct tool loop, `ToolRegistry`, pure `validate_tool_arguments` |
-| **Infrastructure** | OpenRouter HTTP, SQLite, Chroma, workspace FS, WebSocket |
+| **Domain** | Models, `ConversationState`, `Tool` protocol, ports — no I/O |
+| **Harness** | `Agent`, ReAct loop, `ToolRegistry`, arg / URL / Python guards |
+| **Features** | Product use-cases (`brief`, `self_harness`) on top of the harness |
+| **Adapters** | OpenRouter HTTP, SQLite, Chroma, workspace FS, WebSocket |
 | **Orchestration** | Multi-agent runtime with inbox/outbox + synchronous `ask` |
 | **Tools** | Thin adapters over ports, registered at the composition root |
+| **Entrypoints** | CLI composition root |
 
 Dependency direction always points inward. The agent loop depends on an `LLMPort` protocol, not on OpenRouter directly — so tests inject a fake LLM.
 

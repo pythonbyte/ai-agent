@@ -34,23 +34,23 @@ Everything below is **deterministic software around the model** (OpenRouter toda
 
 | Capability | Status | What you get | Where it lives |
 |---|---|---|---|
-| **Decide → act → observe loop** | Done | Bounded ReAct loop (`respond` / `call_tools` / `done`) with `max_tool_rounds` | [`application/loop.py`](src/ai_agent/application/loop.py) |
+| **Decide → act → observe loop** | Done | Bounded ReAct loop (`respond` / `call_tools` / `done`) with `max_tool_rounds` | [`harness/loop.py`](src/ai_agent/harness/loop.py) |
 | **Structured decisions** | Done | Pydantic `AgentDecision`; coerces tool-name-as-kind mistakes from LLMs | [`domain/models.py`](src/ai_agent/domain/models.py) |
-| **Tool registry & dispatch** | Done | Name → tool map, config `select()`, safe `execute()` | [`application/registry.py`](src/ai_agent/application/registry.py) |
-| **Argument validation** | Done | Required / type / unknown-key checks before any tool I/O | [`application/tool_args.py`](src/ai_agent/application/tool_args.py) |
-| **Web tools** | Done | `web_search` (DuckDuckGo) + `http_get` (http/https only, size limits) | [`tools/`](src/ai_agent/tools/) · [`infrastructure/`](src/ai_agent/infrastructure/) |
-| **Workspace tools** | Done | Sandboxed `workspace_search` / read under `workspace_root` | [`infrastructure/workspace_fs.py`](src/ai_agent/infrastructure/workspace_fs.py) |
+| **Tool registry & dispatch** | Done | Name → tool map, config `select()`, safe `execute()` | [`harness/registry.py`](src/ai_agent/harness/registry.py) |
+| **Argument validation** | Done | Required / type / unknown-key checks before any tool I/O | [`harness/tool_args.py`](src/ai_agent/harness/tool_args.py) |
+| **Web tools** | Done | `web_search` (DuckDuckGo) + `http_get` (http/https only, size limits) | [`tools/`](src/ai_agent/tools/) · [`adapters/`](src/ai_agent/adapters/) |
+| **Workspace tools** | Done | Sandboxed `workspace_search` / read under `workspace_root` | [`adapters/workspace_fs.py`](src/ai_agent/adapters/workspace_fs.py) |
 | **Session state** | Done | Per-conversation messages + tool traces; finished sessions restart cleanly | [`domain/state.py`](src/ai_agent/domain/state.py) · [`orchestration/runtime.py`](src/ai_agent/orchestration/runtime.py) |
-| **Durable memory** | Done | SQLite KV `memory` tool + session persistence | [`infrastructure/sqlite_store.py`](src/ai_agent/infrastructure/sqlite_store.py) |
-| **RAG as a tool** | Done | Local Chroma (+ in-memory tests); `ai-agent ingest --docs` | [`infrastructure/chroma_retriever.py`](src/ai_agent/infrastructure/chroma_retriever.py) |
+| **Durable memory** | Done | SQLite KV `memory` tool + session persistence | [`adapters/sqlite_store.py`](src/ai_agent/adapters/sqlite_store.py) |
+| **RAG as a tool** | Done | Local Chroma (+ in-memory tests); `ai-agent ingest --docs` | [`adapters/chroma_retriever.py`](src/ai_agent/adapters/chroma_retriever.py) |
 | **Multi-agent handoff** | Done | Coordinator → `message_agent` → researcher (sync ask + timeout) | [`orchestration/runtime.py`](src/ai_agent/orchestration/runtime.py) · [`config/agents/`](config/agents/) |
-| **Serving surfaces** | Done | Console CLI, WebSocket chat (`--server`), multi-agent demo | [`cli.py`](src/ai_agent/cli.py) · [`infrastructure/server.py`](src/ai_agent/infrastructure/server.py) |
+| **Serving surfaces** | Done | Console CLI, WebSocket chat (`--server`), multi-agent demo | [`entrypoints/cli.py`](src/ai_agent/entrypoints/cli.py) · [`adapters/server.py`](src/ai_agent/adapters/server.py) |
 | **Guardrails (light)** | Done | URL scheme allowlist, path jail, AST calculator, Python deny-list + subprocess timeout | `url_safety` · `workspace_fs` · `calculator` · `python_guard` |
-| **Provider portability** | Done | `LLMPort` + httpx OpenRouter adapter (no SDK lock-in) | [`infrastructure/llm.py`](src/ai_agent/infrastructure/llm.py) |
-| **Research Desk** | Done | Personal Operator persona + `brief` → cited markdown under `briefs/` | [`config/agents/operator.yaml`](config/agents/operator.yaml) · [`application/brief.py`](src/ai_agent/application/brief.py) |
-| **HITL approvals** | Done | `request_approval` tool + optional `brief --approve` (console Y/n) | [`tools/request_approval.py`](src/ai_agent/tools/request_approval.py) · [`infrastructure/approval.py`](src/ai_agent/infrastructure/approval.py) |
-| **Code execution** | Done | `run_python` — subprocess + AST deny-list (not full container sandbox) | [`tools/run_python.py`](src/ai_agent/tools/run_python.py) · [`application/python_guard.py`](src/ai_agent/application/python_guard.py) |
-| **Self-Harness (experimental)** | Scaffold | Mine failures → propose YAML patches → human `accept` after pytest | [`application/self_harness.py`](src/ai_agent/application/self_harness.py) |
+| **Provider portability** | Done | `LLMPort` + httpx OpenRouter adapter (no SDK lock-in) | [`adapters/llm.py`](src/ai_agent/adapters/llm.py) |
+| **Research Desk** | Done | Personal Operator persona + `brief` → cited markdown under `briefs/` | [`config/agents/operator.yaml`](config/agents/operator.yaml) · [`features/brief`](src/ai_agent/features/brief/service.py) |
+| **HITL approvals** | Done | `request_approval` tool + optional `brief --approve` (console Y/n) | [`tools/request_approval.py`](src/ai_agent/tools/request_approval.py) · [`adapters/approval.py`](src/ai_agent/adapters/approval.py) |
+| **Code execution** | Done | `run_python` — subprocess + AST deny-list (not full container sandbox) | [`tools/run_python.py`](src/ai_agent/tools/run_python.py) · [`harness/python_guard.py`](src/ai_agent/harness/python_guard.py) |
+| **Self-Harness (experimental)** | Scaffold | Mine failures → propose YAML patches → human `accept` after pytest | [`features/self_harness`](src/ai_agent/features/self_harness/service.py) |
 | **Context compaction** | — | Full history in window today | Roadmap |
 | **OS / container sandbox** | — | Scoped limits only (not Docker/Firecracker) | Roadmap |
 
@@ -63,11 +63,13 @@ Everything below is **deterministic software around the model** (OpenRouter toda
 ```text
 src/ai_agent/
 ├── domain/           # models, ConversationState, Tool protocol, ports
-├── application/      # Agent, ReAct loop, ToolRegistry, arg / URL validation
-├── infrastructure/   # OpenRouter, SQLite, Chroma, DuckDuckGo, FS, WebSocket
+├── harness/          # Agent, ReAct loop, ToolRegistry, guards
+├── features/         # brief, self_harness (product use-cases)
+├── adapters/         # OpenRouter, SQLite, Chroma, DuckDuckGo, FS, WebSocket
 ├── orchestration/    # multi-agent runtime (inbox / outbox / ask)
-├── tools/            # thin adapters over ports
-└── cli.py            # composition root
+├── tools/            # agent-facing tools over ports
+├── support/          # shared helpers (console I/O)
+└── entrypoints/      # CLI composition root
 ```
 
 ```text

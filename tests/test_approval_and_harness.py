@@ -7,15 +7,15 @@ from pathlib import Path
 import pytest
 import yaml
 
-from ai_agent.application.registry import ToolRegistry
-from ai_agent.application.self_harness import (
+from ai_agent.adapters.approval import AutoApprovalGate
+from ai_agent.features.self_harness.service import (
     accept_harness_patch,
     load_failures,
     mine_weaknesses,
     propose_harness_patch,
     record_failure,
 )
-from ai_agent.infrastructure.approval import AutoApprovalGate
+from ai_agent.harness.registry import ToolRegistry
 from ai_agent.tools.request_approval import RequestApprovalTool
 
 

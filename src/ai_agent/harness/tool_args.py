@@ -84,6 +84,6 @@ def _coerce_value(
         return value, None
 
     # number: int or float, but not bool
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
+    if isinstance(value, bool) or not isinstance(value, int | float):
         return value, f"Argument {param.name} must be a number"
     return float(value), None

@@ -6,11 +6,11 @@ import logging
 
 from aioconsole import ainput, aprint
 
-from ai_agent.application.loop import LLMPort, run_tool_loop
-from ai_agent.application.registry import ToolRegistry
-from ai_agent.console_io import restore_blocking_stdio
 from ai_agent.domain.models import AgentConfig, StepResult
 from ai_agent.domain.state import ConversationState
+from ai_agent.harness.loop import LLMPort, run_tool_loop
+from ai_agent.harness.registry import ToolRegistry
+from ai_agent.support.console_io import restore_blocking_stdio
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +72,7 @@ class Agent:
             logger.exception("agent_step_failed agent_id=%s", self.agent_id)
             session.mark_done()
             try:
-                from ai_agent.application.self_harness import record_failure
+                from ai_agent.features.self_harness.service import record_failure
 
                 record_failure(
                     agent_id=self.agent_id,

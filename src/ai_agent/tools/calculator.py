@@ -27,7 +27,7 @@ _UNARY_OPS: dict[type[ast.unaryop], Callable[[float], float]] = {
 def _eval_node(node: ast.AST) -> float:
     if isinstance(node, ast.Expression):
         return _eval_node(node.body)
-    if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+    if isinstance(node, ast.Constant) and isinstance(node.value, int | float):
         return float(node.value)
     if isinstance(node, ast.BinOp):
         bin_fn = _BIN_OPS.get(type(node.op))

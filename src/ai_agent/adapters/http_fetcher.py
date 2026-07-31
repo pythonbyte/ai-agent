@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import httpx
 
-from ai_agent.application.url_safety import HttpFetchError, assert_allowed_url
+from ai_agent.harness.url_safety import HttpFetchError, assert_allowed_url
 
 DEFAULT_TIMEOUT_SECONDS = 15.0
 DEFAULT_MAX_BYTES = 100_000

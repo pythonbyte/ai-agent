@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import logging
 
-from ai_agent.application.tool_args import validate_tool_arguments
 from ai_agent.domain.tool import Tool, ToolResult, ToolSpec
+from ai_agent.harness.tool_args import validate_tool_arguments
 
 logger = logging.getLogger(__name__)
 

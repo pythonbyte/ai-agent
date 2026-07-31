@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-from ai_agent.application.python_guard import validate_python_code
+from ai_agent.adapters.python_executor import SubprocessPythonExecutor
 from ai_agent.domain.ports import CodeExecutionResult
-from ai_agent.infrastructure.python_executor import SubprocessPythonExecutor
+from ai_agent.harness.python_guard import validate_python_code
 from ai_agent.tools.run_python import RunPythonTool
 
 

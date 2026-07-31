@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from ai_agent.application.tool_args import validate_tool_arguments
 from ai_agent.domain.tool import ToolParameter
+from ai_agent.harness.tool_args import validate_tool_arguments
 
 
 def _params(*items: ToolParameter) -> list[ToolParameter]:

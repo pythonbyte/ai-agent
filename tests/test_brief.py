@@ -6,13 +6,13 @@ from pathlib import Path
 
 import pytest
 
-from ai_agent.application.brief import (
+from ai_agent.adapters.approval import AutoApprovalGate
+from ai_agent.domain.models import AgentConfig, AgentDecision, Personality, StepResult
+from ai_agent.features.brief.service import (
     render_brief_markdown,
     run_research_brief,
     slugify,
 )
-from ai_agent.domain.models import AgentConfig, AgentDecision, Personality, StepResult
-from ai_agent.infrastructure.approval import AutoApprovalGate
 from ai_agent.tools import build_default_registry
 from tests.conftest import ScriptedLLM, decision_call_tools, make_agent
 

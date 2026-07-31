@@ -11,9 +11,9 @@ from typing import Any
 import websockets
 from websockets.asyncio.server import ServerConnection
 
-from ai_agent.application.agent import Agent
 from ai_agent.domain.models import StepResult
 from ai_agent.domain.ports import SessionStore
+from ai_agent.harness.agent import Agent
 from ai_agent.orchestration.runtime import AgentRuntime
 
 logger = logging.getLogger(__name__)

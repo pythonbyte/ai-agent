@@ -8,10 +8,10 @@ import re
 from datetime import UTC, datetime
 from pathlib import Path
 
-from ai_agent.application.agent import Agent
 from ai_agent.domain.models import StepResult
 from ai_agent.domain.ports import ApprovalGate
 from ai_agent.domain.state import ConversationState
+from ai_agent.harness.agent import Agent
 
 logger = logging.getLogger(__name__)
 

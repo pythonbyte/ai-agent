@@ -6,9 +6,9 @@ from pathlib import Path
 
 import pytest
 
+from ai_agent.adapters.sqlite_store import SqliteStore
 from ai_agent.domain.models import AgentConfig, AgentDecision
 from ai_agent.domain.state import ConversationState
-from ai_agent.infrastructure.sqlite_store import SqliteStore
 from ai_agent.orchestration.runtime import AgentRuntime
 from ai_agent.tools.memory import MemoryTool
 from tests.conftest import ScriptedLLM, make_agent

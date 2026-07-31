@@ -6,8 +6,8 @@ import asyncio
 
 import pytest
 
-from ai_agent.application.registry import ToolRegistry
 from ai_agent.domain.models import AgentConfig, AgentDecision, Personality
+from ai_agent.harness.registry import ToolRegistry
 from ai_agent.orchestration.runtime import AgentRuntime
 from ai_agent.tools.message_agent import MessageAgentTool
 from tests.conftest import ScriptedLLM, decision_call_tools, make_agent

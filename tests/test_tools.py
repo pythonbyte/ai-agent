@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from ai_agent.application.registry import ToolRegistry
+from ai_agent.harness.registry import ToolRegistry
 from ai_agent.tools.calculator import CalculatorTool, safe_eval
 from ai_agent.tools.datetime_tool import CurrentTimeTool
 from ai_agent.tools.note import NoteTool

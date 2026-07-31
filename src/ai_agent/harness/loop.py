@@ -8,10 +8,10 @@ from typing import Protocol, TypeVar
 
 from pydantic import BaseModel
 
-from ai_agent.application.registry import ToolRegistry
 from ai_agent.domain.models import AgentConfig, AgentDecision, Message, StepResult
 from ai_agent.domain.state import ConversationState
 from ai_agent.domain.tool import ToolResult
+from ai_agent.harness.registry import ToolRegistry
 
 logger = logging.getLogger(__name__)
 

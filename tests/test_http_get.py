@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-from ai_agent.application.registry import ToolRegistry
-from ai_agent.application.url_safety import HttpFetchError, assert_allowed_url
 from ai_agent.domain.tool import BaseTool, ToolParameter, ToolResult
+from ai_agent.harness.registry import ToolRegistry
+from ai_agent.harness.url_safety import HttpFetchError, assert_allowed_url
 from ai_agent.tools.http_get import HttpGetTool
 
 

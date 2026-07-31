@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ai_agent.application.registry import ToolRegistry
+from ai_agent.adapters.http_fetcher import HttpxFetcher
+from ai_agent.adapters.python_executor import SubprocessPythonExecutor
+from ai_agent.adapters.web_search import DuckDuckGoSearcher
+from ai_agent.adapters.workspace_fs import WorkspaceFS
 from ai_agent.domain.ports import (
     AgentMessenger,
     ApprovalGate,
@@ -15,10 +18,7 @@ from ai_agent.domain.ports import (
     WebSearcher,
     WorkspaceReader,
 )
-from ai_agent.infrastructure.http_fetcher import HttpxFetcher
-from ai_agent.infrastructure.python_executor import SubprocessPythonExecutor
-from ai_agent.infrastructure.web_search import DuckDuckGoSearcher
-from ai_agent.infrastructure.workspace_fs import WorkspaceFS
+from ai_agent.harness.registry import ToolRegistry
 from ai_agent.tools.calculator import CalculatorTool
 from ai_agent.tools.datetime_tool import CurrentTimeTool
 from ai_agent.tools.http_get import HttpGetTool

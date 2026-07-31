@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from ai_agent.adapters.chroma_retriever import format_chunks
 from ai_agent.domain.ports import Retriever
 from ai_agent.domain.tool import BaseTool, ToolParameter, ToolResult
-from ai_agent.infrastructure.chroma_retriever import format_chunks
 
 
 class RetrieveTool(BaseTool):

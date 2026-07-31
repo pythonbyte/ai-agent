@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from ai_agent.application.url_safety import assert_allowed_url
+from ai_agent.adapters.http_fetcher import DEFAULT_MAX_BYTES
 from ai_agent.domain.ports import HttpFetcher
 from ai_agent.domain.tool import BaseTool, ToolParameter, ToolResult
-from ai_agent.infrastructure.http_fetcher import DEFAULT_MAX_BYTES
+from ai_agent.harness.url_safety import assert_allowed_url
 
 
 class HttpGetTool(BaseTool):

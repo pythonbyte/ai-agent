@@ -19,7 +19,7 @@ from ai_agent.domain.ports import SessionStore
 from ai_agent.domain.state import ConversationState
 
 if TYPE_CHECKING:
-    from ai_agent.application.agent import Agent
+    from ai_agent.harness.agent import Agent
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +75,7 @@ class AgentRuntime:
         self._running = False
 
     def _default_output_handler(self, agent_id: str, result: StepResult) -> None:
-        from ai_agent.console_io import console_print
+        from ai_agent.support.console_io import console_print
 
         console_print(f"[{agent_id}] Assistant: {result.message}")
 

@@ -1,17 +1,17 @@
 """
-ai-agent — a small, typed, tool-using conversational agent kit.
+ai-agent — a typed tool-using agent harness.
 
-Clean architecture layers:
-  domain → application → infrastructure / orchestration / tools / cli
+Layers:
+  domain → harness / features → adapters / orchestration / tools → entrypoints
 """
 
-from ai_agent.application.agent import Agent
-from ai_agent.application.registry import ToolRegistry
+from ai_agent.adapters.config_loader import load_agent_config
+from ai_agent.adapters.llm import OpenRouterLLM
 from ai_agent.domain.models import AgentConfig, Personality, StepResult
 from ai_agent.domain.state import ConversationState
 from ai_agent.domain.tool import BaseTool, Tool, ToolParameter, ToolResult
-from ai_agent.infrastructure.config_loader import load_agent_config
-from ai_agent.infrastructure.llm import OpenRouterLLM
+from ai_agent.harness.agent import Agent
+from ai_agent.harness.registry import ToolRegistry
 from ai_agent.orchestration.runtime import AgentRuntime
 from ai_agent.tools import build_default_registry
 

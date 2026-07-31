@@ -7,8 +7,8 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
+from ai_agent.adapters.config_loader import ConfigError, load_agent_config
 from ai_agent.domain.models import AgentConfig, Personality
-from ai_agent.infrastructure.config_loader import ConfigError, load_agent_config
 
 
 class TestPersonalityValidation:

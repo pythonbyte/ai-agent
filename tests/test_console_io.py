@@ -8,7 +8,7 @@ import sys
 
 import pytest
 
-from ai_agent.console_io import console_print, restore_blocking_stdio
+from ai_agent.support.console_io import console_print, restore_blocking_stdio
 
 
 def test_restore_blocking_stdio_is_noop_safe() -> None:

@@ -40,7 +40,7 @@ Repository = "https://github.com/pythonbyte/ai-agent"
 Documentation = "https://github.com/pythonbyte/ai-agent#readme"
 
 [project.scripts]
-ai-agent = "ai_agent.cli:main"
+ai-agent = "ai_agent.entrypoints.cli:main"
 
 [build-system]
 requires = ["hatchling"]
@@ -120,10 +120,10 @@ known-first-party = ["ai_agent"]
 [tool.mutmut]
 source_paths = ["src/"]
 only_mutate = [
-    "src/ai_agent/application/tool_args.py",
-    "src/ai_agent/application/url_safety.py",
-    "src/ai_agent/infrastructure/workspace_fs.py",
-    "src/ai_agent/application/registry.py",
+    "src/ai_agent/harness/tool_args.py",
+    "src/ai_agent/harness/url_safety.py",
+    "src/ai_agent/adapters/workspace_fs.py",
+    "src/ai_agent/harness/registry.py",
 ]
 pytest_add_cli_args_test_selection = ["tests/"]
 pytest_add_cli_args = ["-q", "--tb=no"]

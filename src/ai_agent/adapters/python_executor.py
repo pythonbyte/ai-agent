@@ -9,8 +9,8 @@ import sys
 import tempfile
 from pathlib import Path
 
-from ai_agent.application.python_guard import validate_python_code
 from ai_agent.domain.ports import CodeExecutionResult
+from ai_agent.harness.python_guard import validate_python_code
 
 logger = logging.getLogger(__name__)
 

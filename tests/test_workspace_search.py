@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from ai_agent.infrastructure.workspace_fs import WorkspaceFS, is_within_root
+from ai_agent.adapters.workspace_fs import WorkspaceFS, is_within_root
 from ai_agent.tools.workspace_search import WorkspaceSearchTool
 
 

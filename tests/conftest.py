@@ -6,10 +6,10 @@ from typing import Any
 
 import pytest
 
-from ai_agent.application.agent import Agent
-from ai_agent.application.registry import ToolRegistry
 from ai_agent.domain.models import AgentConfig, AgentDecision, Personality, ToolCallRequest
 from ai_agent.domain.state import ConversationState
+from ai_agent.harness.agent import Agent
+from ai_agent.harness.registry import ToolRegistry
 from ai_agent.tools import build_default_registry
 
 
