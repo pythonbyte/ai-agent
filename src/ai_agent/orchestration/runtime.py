@@ -6,6 +6,7 @@ import asyncio
 import json
 import logging
 import tempfile
+from collections import defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -14,12 +15,15 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ai_agent.domain.models import StepResult
+from ai_agent.domain.ports import SessionStore
 from ai_agent.domain.state import ConversationState
 
 if TYPE_CHECKING:
     from ai_agent.application.agent import Agent
 
 logger = logging.getLogger(__name__)
+
+DEFAULT_ASK_TIMEOUT_SECONDS = 60.0
 
 
 class MessageType(Enum):
@@ -60,9 +64,14 @@ class AgentRuntime:
     def __init__(
         self,
         on_agent_output: Callable[[str, StepResult], None] | None = None,
+        session_store: SessionStore | None = None,
+        ask_timeout_seconds: float = DEFAULT_ASK_TIMEOUT_SECONDS,
     ) -> None:
         self._contexts: dict[str, AgentContext] = {}
         self._on_agent_output = on_agent_output or self._default_output_handler
+        self._session_store = session_store
+        self._ask_timeout_seconds = ask_timeout_seconds
+        self._pending_asks: dict[str, list[asyncio.Future[StepResult]]] = defaultdict(list)
         self._running = False
 
     def _default_output_handler(self, agent_id: str, result: StepResult) -> None:
@@ -71,7 +80,15 @@ class AgentRuntime:
     def register(self, agent_id: str, agent: Agent) -> asyncio.Queue[RuntimeMessage]:
         if agent_id in self._contexts:
             raise ValueError(f"Agent {agent_id} already registered")
-        context = AgentContext(agent=agent, session=agent.create_session())
+
+        session = agent.create_session()
+        if self._session_store is not None:
+            loaded = self._session_store.load(agent_id)
+            if loaded is not None:
+                session = loaded
+                logger.info("Loaded session for agent: %s", agent_id)
+
+        context = AgentContext(agent=agent, session=session)
         self._contexts[agent_id] = context
         logger.info("Registered agent: %s", agent_id)
         return context.inbox
@@ -92,6 +109,22 @@ class AgentRuntime:
             raise ValueError(f"Agent {agent_id} not found")
         return self._contexts[agent_id].session
 
+    def _persist(self, agent_id: str, session: ConversationState) -> None:
+        if self._session_store is None:
+            return
+        self._session_store.save(agent_id, session)
+
+    def _publish_result(self, agent_id: str, result: StepResult) -> None:
+        context = self._contexts[agent_id]
+        context.outbox.put_nowait((agent_id, result))
+        self._on_agent_output(agent_id, result)
+        self._persist(agent_id, context.session)
+        pending = self._pending_asks.get(agent_id)
+        if pending:
+            future = pending.pop(0)
+            if not future.done():
+                future.set_result(result)
+
     async def send_message(
         self,
         agent_id: str,
@@ -103,15 +136,44 @@ class AgentRuntime:
         msg = RuntimeMessage(sender=sender, recipient=agent_id, payload=message)
         await self._contexts[agent_id].inbox.put(msg)
 
+    async def ask(
+        self,
+        target_id: str,
+        message: str,
+        *,
+        sender: str,
+    ) -> str:
+        """Ask another agent and wait for its next StepResult (AgentMessenger)."""
+        if target_id == sender:
+            return "Error: cannot message yourself"
+        if target_id not in self._contexts:
+            return f"Error: unknown agent {target_id}"
+
+        loop = asyncio.get_running_loop()
+        future: asyncio.Future[StepResult] = loop.create_future()
+        self._pending_asks[target_id].append(future)
+        await self.send_message(target_id, message, sender=sender)
+        try:
+            result = await asyncio.wait_for(future, timeout=self._ask_timeout_seconds)
+        except TimeoutError:
+            if not future.done():
+                future.cancel()
+            pending = self._pending_asks.get(target_id, [])
+            if future in pending:
+                pending.remove(future)
+            return f"Error: timed out waiting for {target_id}"
+        return result.message
+
     async def _run_agent_loop(self, agent_id: str) -> None:
         context = self._contexts[agent_id]
         agent = context.agent
         logger.info("Starting agent loop: %s", agent_id)
 
         try:
-            result = await agent.step(session=context.session, user_input=None)
-            context.outbox.put_nowait((agent_id, result))
-            self._on_agent_output(agent_id, result)
+            # Skip greeting LLM path if session already has history (reloaded).
+            if not context.session.messages:
+                result = await agent.step(session=context.session, user_input=None)
+                self._publish_result(agent_id, result)
         except Exception as exc:
             logger.error("[%s] Error on initial step: %s", agent_id, exc)
 
@@ -126,8 +188,7 @@ class AgentRuntime:
                     session=context.session,
                     user_input=msg.payload,
                 )
-                context.outbox.put_nowait((agent_id, result))
-                self._on_agent_output(agent_id, result)
+                self._publish_result(agent_id, result)
 
                 if result.kind in {"done", "error"}:
                     break
@@ -139,6 +200,7 @@ class AgentRuntime:
                 context.session.mark_done()
                 break
 
+        self._persist(agent_id, context.session)
         self._save_session_report(agent_id, context.session)
         context.active = False
         logger.info("[%s] Agent loop ended", agent_id)

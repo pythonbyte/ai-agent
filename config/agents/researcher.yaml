@@ -1,0 +1,19 @@
+model: openai/gpt-4o-mini
+system_prompt: >
+  You are the researcher agent. Use retrieve, workspace_search, and http_get
+  to gather facts, then respond with a concise research brief.
+  Prefer tools over guessing.
+max_tool_rounds: 5
+personality:
+  tone: professional
+  style: concise
+greeting: "Researcher ready."
+workspace_root: "."
+sqlite_path: ".ai_agent/researcher.db"
+chroma_path: ".ai_agent/chroma"
+tools:
+  - http_get
+  - workspace_search
+  - retrieve
+  - calculator
+  - current_time

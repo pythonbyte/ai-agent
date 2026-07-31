@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 
+from ai_agent.application.tool_args import validate_tool_arguments
 from ai_agent.domain.tool import Tool, ToolResult, ToolSpec
 
 logger = logging.getLogger(__name__)
@@ -62,8 +63,23 @@ class ToolRegistry:
                 output="",
                 error=f"Unknown tool: {name}",
             )
+
+        validation = validate_tool_arguments(tool.parameters, arguments)
+        if not validation.ok:
+            logger.warning(
+                "Tool argument validation failed name=%s error=%s",
+                name,
+                validation.error,
+            )
+            return ToolResult(
+                tool_name=name,
+                success=False,
+                output="",
+                error=validation.error or "Invalid arguments",
+            )
+
         try:
-            return await tool.execute(arguments)
+            return await tool.execute(validation.arguments)
         except Exception as exc:  # noqa: BLE001 — surface tool failures to the LLM
             logger.exception("Tool %s failed", name)
             return ToolResult(

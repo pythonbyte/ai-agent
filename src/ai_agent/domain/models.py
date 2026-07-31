@@ -27,6 +27,9 @@ class AgentConfig(BaseModel):
     personality: Personality = Field(default_factory=Personality)
     tools: list[str] = Field(default_factory=list)
     greeting: str | None = "Hello! How can I help you today?"
+    workspace_root: str = "."
+    sqlite_path: str = ".ai_agent/state.db"
+    chroma_path: str = ".ai_agent/chroma"
 
 
 class Message(BaseModel):

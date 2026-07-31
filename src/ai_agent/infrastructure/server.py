@@ -13,6 +13,7 @@ from websockets.asyncio.server import ServerConnection
 
 from ai_agent.application.agent import Agent
 from ai_agent.domain.models import StepResult
+from ai_agent.domain.ports import SessionStore
 from ai_agent.orchestration.runtime import AgentRuntime
 
 logger = logging.getLogger(__name__)
@@ -31,11 +32,15 @@ class WebSocketServer:
         *,
         host: str = "localhost",
         port: int = 8765,
+        session_store: SessionStore | None = None,
     ) -> None:
         self._agent_factory = agent_factory
         self.host = host
         self.port = port
-        self.runtime = AgentRuntime(on_agent_output=self._on_output)
+        self.runtime = AgentRuntime(
+            on_agent_output=self._on_output,
+            session_store=session_store,
+        )
         self._connections: dict[str, ServerConnection] = {}
         self._counter = 0
 

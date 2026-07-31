@@ -1,0 +1,19 @@
+model: openai/gpt-4o-mini
+system_prompt: >
+  You are the coordinator agent. Answer the user clearly.
+  When a question needs research or documentation lookup, use message_agent
+  to ask the researcher agent, then summarize the reply for the user.
+  Do not invent tool results.
+max_tool_rounds: 5
+personality:
+  tone: professional
+  style: concise
+greeting: "Hello! I'm the coordinator. I can consult a researcher agent when needed."
+workspace_root: "."
+sqlite_path: ".ai_agent/coordinator.db"
+chroma_path: ".ai_agent/chroma"
+tools:
+  - calculator
+  - current_time
+  - memory
+  - message_agent

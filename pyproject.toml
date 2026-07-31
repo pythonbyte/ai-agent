@@ -27,6 +27,10 @@ dev = [
     "mypy>=1.8.0",
     "ruff>=0.1.0",
     "types-PyYAML>=6.0.0",
+    "mutmut>=3.2.0",
+]
+rag = [
+    "chromadb>=0.5.0",
 ]
 
 [project.urls]
@@ -50,7 +54,9 @@ include = [
     "/tests",
     "/config",
     "/examples",
+    "/docs",
 ]
+
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -85,7 +91,7 @@ mypy_path = "src"
 packages = ["ai_agent"]
 
 [[tool.mypy.overrides]]
-module = ["aioconsole", "websockets.*"]
+module = ["aioconsole", "websockets.*", "chromadb"]
 ignore_missing_imports = true
 
 [tool.ruff]
@@ -109,3 +115,14 @@ ignore = [
 
 [tool.ruff.lint.isort]
 known-first-party = ["ai_agent"]
+
+[tool.mutmut]
+source_paths = ["src/"]
+only_mutate = [
+    "src/ai_agent/application/tool_args.py",
+    "src/ai_agent/application/url_safety.py",
+    "src/ai_agent/infrastructure/workspace_fs.py",
+    "src/ai_agent/application/registry.py",
+]
+pytest_add_cli_args_test_selection = ["tests/"]
+pytest_add_cli_args = ["-q", "--tb=no"]

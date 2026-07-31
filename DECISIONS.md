@@ -14,11 +14,11 @@ This project implements that loop as a **generic tool-using agent**, not a speci
 
 | Layer | Responsibility |
 |---|---|
-| **Domain** | Models, `ConversationState`, `Tool` protocol — no I/O |
-| **Application** | `Agent`, ReAct tool loop, `ToolRegistry` |
-| **Infrastructure** | OpenRouter HTTP client, YAML config, WebSocket |
-| **Orchestration** | Multi-agent runtime with isolated inbox/outbox queues |
-| **Tools** | Built-in adapters registered at the composition root |
+| **Domain** | Models, `ConversationState`, `Tool` protocol, ports (`SessionStore`, `Retriever`, …) — no I/O |
+| **Application** | `Agent`, ReAct tool loop, `ToolRegistry`, pure `validate_tool_arguments` |
+| **Infrastructure** | OpenRouter HTTP, SQLite, Chroma, workspace FS, WebSocket |
+| **Orchestration** | Multi-agent runtime with inbox/outbox + synchronous `ask` |
+| **Tools** | Thin adapters over ports, registered at the composition root |
 
 Dependency direction always points inward. The agent loop depends on an `LLMPort` protocol, not on OpenRouter directly — so tests inject a fake LLM.
 
@@ -34,6 +34,18 @@ Native provider tool-calling APIs differ. A single `AgentDecision` schema (`resp
 
 Each agent runs in its own coroutine with dedicated queues. The WebSocket adapter and console CLI are interchangeable I/O surfaces over the same `Agent.step()`.
 
+### Argument validation in the registry
+
+Tool argument checks live in pure `validate_tool_arguments` and run inside `ToolRegistry.execute` before any tool I/O. Keeps tools dumb and mutation-tests focused on one module.
+
+### RAG is a tool
+
+Retrieval is `retrieve` over a `Retriever` port (Chroma or in-memory). No separate RAG loop — decide → retrieve → observe → respond.
+
+### Multi-agent handoff
+
+`AgentRuntime.ask` implements `AgentMessenger`: put on the specialist inbox, await the next `StepResult`. Only agents that receive `message_agent` in their registry can hand off (typically the coordinator).
+
 ---
 
 ## Trade-offs
@@ -42,13 +54,25 @@ Each agent runs in its own coroutine with dedicated queues. The WebSocket adapte
 
 **Chose `httpx`.** Full control over retries, timeouts, and response parsing. Avoids SDK churn for a thin Chat Completions call.
 
+### SQLite for session + memory
+
+**Chose stdlib `sqlite3`.** Durable sessions and key/value memory without an extra DB dependency. Temp JSON session reports remain as debug exports.
+
+### Chroma as optional RAG extra
+
+**Chose local Chroma** behind an optional `[rag]` extra so the core kit stays light. Tests use `InMemoryRetriever` + a fake embedder.
+
 ### In-memory note tool
 
-**Chose simplicity.** The `note` tool proves multi-tool stateful use without a database. Production apps would inject a real store behind the same `Tool` protocol.
+**Kept for demos.** Prefer `memory` (SQLite) for durable facts. `note` remains as an ephemeral scratchpad.
 
 ### Greeting is deterministic
 
 The first message is config-driven, not LLM-generated. Reliability beats variety for the opening turn.
+
+### Mutation testing
+
+**Chose `mutmut`** on high-value pure modules (`tool_args`, workspace path checks, registry validation). Run after unit tests; triage survivors manually — do not chase 100% killed without judgment.
 
 ---
 
@@ -57,6 +81,7 @@ The first message is config-driven, not LLM-generated. Reliability beats variety
 - Not an observability platform
 - Not tied to a single framework beyond OpenAI-compatible HTTP
 - Not a customer-support field collector (that can be a *tool* or a separate config, not the core)
+- Not a free-form multi-agent mesh (synchronous coordinator→specialist ask only)
 
 ---
 

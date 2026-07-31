@@ -32,6 +32,10 @@ env/
 htmlcov/
 .tox/
 .nox/
+mutants/
+
+# Local agent state
+.ai_agent/
 
 # Type checking
 .mypy_cache/
