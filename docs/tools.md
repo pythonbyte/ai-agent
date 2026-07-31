@@ -1,5 +1,10 @@
 # Tools guide
 
+## web_search
+
+Search the public web via DuckDuckGo (no API key). Returns titles, URLs, and
+snippets. Follow up with `http_get` when you need the full page.
+
 ## http_get
 
 Fetches text from public http(s) URLs. Non-http schemes are rejected.

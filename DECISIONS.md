@@ -72,7 +72,9 @@ The first message is config-driven, not LLM-generated. Reliability beats variety
 
 ### Mutation testing
 
-**Chose `mutmut`** on high-value pure modules (`tool_args`, workspace path checks, registry validation). Run after unit tests; triage survivors manually — do not chase 100% killed without judgment.
+**Chose `mutmut`** on high-value pure modules (`tool_args`, `url_safety`, workspace path checks, registry validation).
+
+Survivors are expected on the first baseline — many are equivalent mutations (error-string wording, boundary tweaks). Workflow: `uv run mutmut run` → `uv run mutmut browse` → add focused tests for important survivors. Noise is reduced via `do_not_mutate_patterns`. Do not gate CI on 100% killed without triage.
 
 ---
 

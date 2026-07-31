@@ -18,12 +18,29 @@ class RetrievedChunk(BaseModel):
     source: str = ""
 
 
+class SearchHit(BaseModel):
+    """One web-search result."""
+
+    title: str
+    url: str
+    snippet: str = ""
+
+
 @runtime_checkable
 class HttpFetcher(Protocol):
     """Fetch a URL body with safety limits applied by the implementation."""
 
     async def get_text(self, url: str, *, max_bytes: int) -> str:
         """Return response body as text, truncated to max_bytes."""
+        ...
+
+
+@runtime_checkable
+class WebSearcher(Protocol):
+    """Search the public web for a query."""
+
+    async def search(self, query: str, *, max_results: int = 5) -> list[SearchHit]:
+        """Return ranked search hits (title, url, snippet)."""
         ...
 
 

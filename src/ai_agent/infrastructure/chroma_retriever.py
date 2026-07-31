@@ -103,9 +103,9 @@ class ChromaRetriever:
         metadatas = [{"source": doc.source, **doc.metadata} for doc in documents]
         self._collection.upsert(
             ids=ids,
-            embeddings=vectors,
+            embeddings=vectors,  # type: ignore[arg-type]
             documents=texts,
-            metadatas=metadatas,
+            metadatas=metadatas,  # type: ignore[arg-type]
         )
         logger.info("Ingested %s documents into Chroma at %s", len(documents), self._path)
         return len(documents)
@@ -113,7 +113,7 @@ class ChromaRetriever:
     async def retrieve(self, query: str, *, top_k: int = 5) -> list[RetrievedChunk]:
         vectors = await self._embedder.embed([query])
         result = self._collection.query(
-            query_embeddings=vectors,
+            query_embeddings=vectors,  # type: ignore[arg-type]
             n_results=max(1, top_k),
         )
         ids = (result.get("ids") or [[]])[0]

@@ -67,6 +67,14 @@ class TestNoteTool:
 
 
 class TestToolRegistry:
+    def test_empty_after_init(self) -> None:
+        """Kills mutmut survivor: self._tools = None instead of {}."""
+        registry = ToolRegistry()
+        assert registry.names() == []
+        assert registry.has("missing") is False
+        assert registry.get("missing") is None
+        assert registry.specs() == []
+
     def test_register_and_select(self) -> None:
         registry = ToolRegistry()
         registry.register(CalculatorTool())
@@ -77,8 +85,9 @@ class TestToolRegistry:
     def test_duplicate_register(self) -> None:
         registry = ToolRegistry()
         registry.register(CalculatorTool())
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="Tool already registered: calculator") as exc_info:
             registry.register(CalculatorTool())
+        assert "calculator" in str(exc_info.value)
 
     def test_select_unknown(self) -> None:
         registry = ToolRegistry()

@@ -62,7 +62,11 @@ def build_system_prompt(config: AgentConfig, registry: ToolRegistry) -> str:
         "You are a tool-using agent. On every turn reply with JSON matching this schema:\n"
         f"{json.dumps(decision_schema, indent=2)}\n\n"
         "Rules:\n"
-        "- Use call_tools when a tool can compute or look up something more reliably than guessing.\n"
+        "- kind MUST be exactly one of: respond, call_tools, done. "
+        "Never put a tool name in kind.\n"
+        "- To use a tool, set kind=call_tools and put the tool in tool_calls "
+        '(example: {"kind":"call_tools","tool_calls":'
+        '[{"name":"message_agent","arguments":{"agent_id":"researcher","message":"..."}}]}).\n'
         "- Use respond when you can answer the user directly.\n"
         "- Use done when the user ends the conversation or the task is complete.\n"
         "- Never invent tool results — wait for tool observations.\n\n"

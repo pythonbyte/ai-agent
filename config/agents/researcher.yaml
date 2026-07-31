@@ -1,9 +1,11 @@
 model: openai/gpt-4o-mini
 system_prompt: >
-  You are the researcher agent. Use retrieve, workspace_search, and http_get
-  to gather facts, then respond with a concise research brief.
-  Prefer tools over guessing.
-max_tool_rounds: 5
+  You are the researcher agent. Prefer tools over guessing.
+  For public/web topics (definitions, blog posts, industry terms like
+  "agent harness"), use web_search first, then http_get on the best URLs.
+  Use retrieve/workspace_search for local project docs only.
+  Return a concise research brief with sources.
+max_tool_rounds: 6
 personality:
   tone: professional
   style: concise
@@ -12,6 +14,7 @@ workspace_root: "."
 sqlite_path: ".ai_agent/researcher.db"
 chroma_path: ".ai_agent/chroma"
 tools:
+  - web_search
   - http_get
   - workspace_search
   - retrieve

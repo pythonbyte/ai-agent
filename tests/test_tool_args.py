@@ -70,3 +70,31 @@ class TestValidateToolArguments:
         params = _params(ToolParameter(name="flag", type="boolean", description="f", required=True))
         result = validate_tool_arguments(params, {"flag": "yes"})
         assert result.ok is False
+
+    def test_number_rejects_bool(self) -> None:
+        params = _params(ToolParameter(name="x", type="number", description="x", required=True))
+        result = validate_tool_arguments(params, {"x": True})
+        assert result.ok is False
+        assert "must be a number" in (result.error or "")
+
+    def test_number_rejects_string(self) -> None:
+        params = _params(ToolParameter(name="x", type="number", description="x", required=True))
+        result = validate_tool_arguments(params, {"x": "1.5"})
+        assert result.ok is False
+
+    def test_number_accepts_float(self) -> None:
+        params = _params(ToolParameter(name="x", type="number", description="x", required=True))
+        result = validate_tool_arguments(params, {"x": 1.5})
+        assert result.ok is True
+        assert result.arguments["x"] == 1.5
+
+    def test_unsupported_type(self) -> None:
+        params = _params(ToolParameter(name="x", type="array", description="x", required=True))
+        result = validate_tool_arguments(params, {"x": []})
+        assert result.ok is False
+        assert "Unsupported" in (result.error or "")
+
+    def test_integer_rejects_float(self) -> None:
+        params = _params(ToolParameter(name="n", type="integer", description="n", required=True))
+        result = validate_tool_arguments(params, {"n": 1.2})
+        assert result.ok is False

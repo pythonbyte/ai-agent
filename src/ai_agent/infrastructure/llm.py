@@ -60,16 +60,19 @@ class OpenRouterLLM:
             {
                 "role": "user",
                 "content": (
-                    "Respond with ONLY valid JSON matching the required schema. No markdown fences."
+                    "Respond with ONLY valid JSON matching the required schema. "
+                    "kind must be exactly respond, call_tools, or done — never a tool name. "
+                    "No markdown fences."
                 ),
             },
         ]
 
         last_error: Exception | None = None
+        last_content = ""
         for attempt in range(1, self.max_retries + 1):
             try:
-                content = await self._chat(prompt_messages)
-                return output_model.model_validate_json(content)
+                last_content = await self._chat(prompt_messages)
+                return output_model.model_validate_json(last_content)
             except (httpx.HTTPError, ValidationError, ValueError) as exc:
                 last_error = exc
                 logger.warning(
@@ -79,6 +82,20 @@ class OpenRouterLLM:
                     exc,
                 )
                 if attempt < self.max_retries:
+                    # Feed the validation error back so the model can correct itself.
+                    if last_content:
+                        prompt_messages = [
+                            *prompt_messages,
+                            {"role": "assistant", "content": last_content},
+                            {
+                                "role": "user",
+                                "content": (
+                                    f"Your previous JSON was invalid: {exc}. "
+                                    "Reply again with ONLY corrected JSON. "
+                                    "kind must be respond, call_tools, or done."
+                                ),
+                            },
+                        ]
                     await asyncio.sleep(0.5 * (2 ** (attempt - 1)))
 
         raise LLMError(f"LLM failed after {self.max_retries} attempts: {last_error}")

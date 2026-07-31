@@ -12,6 +12,7 @@ keywords = ["agent", "llm", "tools", "orchestration", "asyncio"]
 
 dependencies = [
     "aioconsole>=0.8.2",
+    "ddgs>=9.0.0",
     "httpx>=0.28.0",
     "pydantic>=2.12.5",
     "python-dotenv>=1.2.1",
@@ -91,7 +92,7 @@ mypy_path = "src"
 packages = ["ai_agent"]
 
 [[tool.mypy.overrides]]
-module = ["aioconsole", "websockets.*", "chromadb"]
+module = ["aioconsole", "websockets.*", "chromadb", "ddgs", "ddgs.*"]
 ignore_missing_imports = true
 
 [tool.ruff]
@@ -126,3 +127,8 @@ only_mutate = [
 ]
 pytest_add_cli_args_test_selection = ["tests/"]
 pytest_add_cli_args = ["-q", "--tb=no"]
+# Equivalent / noise mutations (log strings, raise messages) — triage survivors with browse.
+do_not_mutate_patterns = [
+    'logger\\.\\w+',
+    'raise \\w+',
+]

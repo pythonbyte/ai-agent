@@ -29,11 +29,20 @@ logger = logging.getLogger(__name__)
 
 
 def _configure_logging(verbose: bool) -> None:
+    """
+    Log to stderr so aioconsole's non-blocking stdout does not raise BlockingIOError.
+    Keep noisy HTTP libraries quieter even with -v.
+    """
     level = logging.DEBUG if verbose else logging.INFO
     logging.basicConfig(
         level=level,
         format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+        stream=sys.stderr,
+        force=True,
     )
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
+    logging.getLogger("openai").setLevel(logging.WARNING)
 
 
 def _build_retriever(chroma_path: str) -> Retriever:
@@ -92,15 +101,15 @@ async def _run_multi_agent(
     """Console UX against the coordinator; researcher runs in the background."""
     from aioconsole import ainput
 
-    outputs: list[str] = []
+    turn_done = asyncio.Event()
 
     def on_output(agent_id: str, result: object) -> None:
         message = getattr(result, "message", str(result))
         if agent_id == "coordinator":
-            print(f"Assistant: {message}")
+            print(f"Assistant: {message}", flush=True)
+            turn_done.set()
         else:
             logger.info("[%s] %s", agent_id, message)
-        outputs.append(f"{agent_id}:{message}")
 
     coord_cfg = load_agent_config(coordinator_config)
     store = SqliteStore(coord_cfg.sqlite_path)
@@ -118,18 +127,30 @@ async def _run_multi_agent(
     runtime.register("coordinator", coordinator)
     await runtime.start_agent("researcher")
     await runtime.start_agent("coordinator")
-    await asyncio.sleep(0.1)
+    await asyncio.sleep(0.05)
+
+    # Fresh agents publish a greeting; resumed (non-done) sessions skip it.
+    if runtime.get_session("coordinator").messages and not turn_done.is_set():
+        print("Assistant: (session resumed — continue chatting)", flush=True)
+        turn_done.set()
+    else:
+        await asyncio.wait_for(turn_done.wait(), timeout=30.0)
 
     try:
-        while not runtime.get_session("coordinator").done:
+        while runtime._contexts["coordinator"].active:  # noqa: SLF001
+            if runtime.get_session("coordinator").done:
+                break
             user_input = await ainput("You: ")
             text = user_input.strip()
             if not text:
                 continue
             if text.lower() in {"exit", "quit", "bye"}:
                 break
+            turn_done.clear()
             await runtime.send_message("coordinator", text)
-            await asyncio.sleep(0.05)
+            await asyncio.wait_for(turn_done.wait(), timeout=180.0)
+    except TimeoutError:
+        print("Timed out waiting for the coordinator.", file=sys.stderr)
     finally:
         await runtime.shutdown()
 

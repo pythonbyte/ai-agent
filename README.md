@@ -135,7 +135,9 @@ uv run mutmut run
 uv run mutmut browse
 ```
 
-Unit tests mock the LLM — no API key required for CI. RAG unit tests use an in-memory retriever (chromadb optional). First mutmut baseline on `tool_args` / `url_safety` / `workspace_fs` / `registry`: treat survivors as a triage queue via `mutmut browse`, not a hard CI gate yet.
+Unit tests mock the LLM — no API key required for CI. RAG unit tests use an in-memory retriever (chromadb optional).
+
+**Mutmut survivors are normal** on a fresh kit: many are equivalent changes (error-string wording, redundant bounds). Use `mutmut browse` to triage; kill important ones with tests; skip logger/raise-message noise via `do_not_mutate_patterns` in `pyproject.toml`. Do not treat “100% killed” as a hard gate until survivors are reviewed.
 
 ## Design notes
 

@@ -40,13 +40,24 @@ class TestAssertAllowedUrl:
     def test_https_ok(self) -> None:
         assert_allowed_url("https://example.com/a")
 
+    def test_http_ok(self) -> None:
+        assert_allowed_url("http://example.com/a")
+
     def test_rejects_file_scheme(self) -> None:
         with pytest.raises(HttpFetchError):
             assert_allowed_url("file:///etc/passwd")
 
+    def test_rejects_ftp(self) -> None:
+        with pytest.raises(HttpFetchError, match="http/https"):
+            assert_allowed_url("ftp://example.com")
+
     def test_rejects_missing_host(self) -> None:
         with pytest.raises(HttpFetchError):
             assert_allowed_url("https:///nohost")
+
+    def test_rejects_empty_scheme(self) -> None:
+        with pytest.raises(HttpFetchError):
+            assert_allowed_url("example.com/path")
 
 
 @pytest.mark.asyncio

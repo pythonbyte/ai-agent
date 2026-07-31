@@ -83,3 +83,23 @@ async def test_runtime_reloads_session(
     runtime2.register("a1", agent2)
     session = runtime2.get_session("a1")
     assert any(m.content == "hello" for m in session.messages)
+
+
+@pytest.mark.asyncio
+async def test_runtime_ignores_finished_session(
+    sample_config: AgentConfig,
+    tmp_path: Path,
+) -> None:
+    """A prior done/error session must not prevent a new interactive run."""
+    store = SqliteStore(tmp_path / "state.db")
+    dead = ConversationState()
+    dead.add_message("user", "old")
+    dead.mark_done()
+    store.save("a1", dead)
+
+    runtime = AgentRuntime(on_agent_output=lambda *_: None, session_store=store)
+    agent = make_agent(sample_config, ScriptedLLM([]))
+    runtime.register("a1", agent)
+    session = runtime.get_session("a1")
+    assert session.done is False
+    assert session.messages == []

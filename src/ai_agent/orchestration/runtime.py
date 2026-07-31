@@ -84,9 +84,15 @@ class AgentRuntime:
         session = agent.create_session()
         if self._session_store is not None:
             loaded = self._session_store.load(agent_id)
-            if loaded is not None:
+            if loaded is not None and not loaded.done:
                 session = loaded
                 logger.info("Loaded session for agent: %s", agent_id)
+            elif loaded is not None and loaded.done:
+                # Prior run ended (respond/done/error). Start a clean interactive session.
+                logger.info(
+                    "Ignoring finished session for agent=%s; starting fresh",
+                    agent_id,
+                )
 
         context = AgentContext(agent=agent, session=session)
         self._contexts[agent_id] = context
