@@ -47,8 +47,10 @@ Everything below is **deterministic software around the model** (OpenRouter toda
 | **Serving surfaces** | Done | Console CLI, WebSocket chat (`--server`), multi-agent demo | [`cli.py`](src/ai_agent/cli.py) · [`infrastructure/server.py`](src/ai_agent/infrastructure/server.py) |
 | **Guardrails (light)** | Done | URL scheme allowlist, path jail, AST calculator, typed config | `url_safety` · `workspace_fs` · `calculator` |
 | **Provider portability** | Done | `LLMPort` + httpx OpenRouter adapter (no SDK lock-in) | [`infrastructure/llm.py`](src/ai_agent/infrastructure/llm.py) |
+| **Research Desk** | Done | Personal Operator persona + `brief` → cited markdown under `briefs/` | [`config/agents/operator.yaml`](config/agents/operator.yaml) · [`application/brief.py`](src/ai_agent/application/brief.py) |
+| **HITL approvals** | Done | `request_approval` tool + optional `brief --approve` (console Y/n) | [`tools/request_approval.py`](src/ai_agent/tools/request_approval.py) · [`infrastructure/approval.py`](src/ai_agent/infrastructure/approval.py) |
+| **Self-Harness (experimental)** | Scaffold | Mine failures → propose YAML patches → human `accept` after pytest | [`application/self_harness.py`](src/ai_agent/application/self_harness.py) |
 | **Context compaction** | — | Full history in window today | Roadmap |
-| **HITL approvals** | — | No human-in-the-loop gates yet | Roadmap |
 | **OS / container sandbox** | — | Scoped limits only (not Docker/Firecracker) | Roadmap |
 
 **Model (not harness):** whatever you set in YAML (`openai/gpt-4o-mini`, etc.) via OpenRouter.
@@ -112,9 +114,52 @@ ai-agent -c config/agent_config.yaml
 | Mode | Command | Notes |
 |---|---|---|
 | Console | `uv run ai-agent -c config/agent_config.yaml` | Single agent |
+| Research operator | `uv run ai-agent -c config/agents/operator.yaml` | Interactive Research Desk |
+| One-shot brief | `uv run ai-agent brief "agent harness"` | Writes `briefs/YYYYMMDD_slug.md` |
+| Brief + approve | `uv run ai-agent brief "topic" --approve` | Console Y/n before write |
 | WebSocket | `uv run ai-agent --server -v` then `websocat ws://localhost:8765` | Chat-style plain text replies |
 | Multi-agent | `uv run ai-agent --multi-agent -v` | Coordinator + researcher handoff |
 | RAG ingest | `uv run ai-agent ingest --docs docs/` | Needs `[rag]` extra |
+| Harness propose | `uv run ai-agent harness propose` | Mine `.ai_agent/failures` → `proposals/` |
+| Harness accept | `uv run ai-agent harness accept <id>` | Pytest gate, then merge into YAML |
+
+---
+
+## Personal Operator / Research Desk
+
+First product vertical on this harness: a **research operator** that turns a topic into a cited brief.
+
+```bash
+uv run ai-agent brief "agent harness"
+# → briefs/20260731_agent-harness.md  (Summary / Key findings / Sources / Open questions)
+
+uv run ai-agent -c config/agents/operator.yaml   # interactive
+```
+
+The operator prefers `web_search` → `http_get` → local `retrieve` / `workspace_search`, remembers prefs via `memory` (`pref.*` keys), and never invents sources. Optional `--approve` gates publication. Irreversible future actions use the `request_approval` tool.
+
+---
+
+## Moonshot: Self-Harness
+
+Industry frontier (not “solved”): a fixed model improves the **software around itself** — prompts, tool descriptions, loop budgets — from execution evidence, without weight updates. Canonical loop: weakness mining → harness proposal → validation (held-in improves, held-out does not regress).
+
+**Reading path**
+
+| Resource | Why |
+|---|---|
+| [Self-Harness (arXiv)](https://arxiv.org/abs/2606.09498) | Core paradigm + results |
+| [Lil’Log — Harness Engineering for Self-Improvement](https://lilianweng.github.io/posts/2026-07-04-harness/) | Map of self-improvement vs weight updates |
+| [LangChain — Anatomy of an Agent Harness](https://www.langchain.com/blog/the-anatomy-of-an-agent-harness) | Agent = Model + Harness vocabulary |
+| [Anthropic — Effective harnesses for long-running agents](https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents) | Long-horizon reliability |
+
+**Scaffold in this repo (human-gated):** failures auto-log on step exceptions; `harness propose` writes a JSON patch (prompt append / `max_tool_rounds` only); `harness accept` runs a pytest subset then merges into YAML. **No auto-merge. No arbitrary Python edits in v0.**
+
+```bash
+uv run ai-agent harness record-failure "Timed out waiting for researcher"
+uv run ai-agent harness propose
+uv run ai-agent harness accept patch_… -c config/agents/operator.yaml
+```
 
 ---
 
@@ -131,6 +176,7 @@ ai-agent -c config/agent_config.yaml
 | `current_time` | Clock / timezone |
 | `note` | Ephemeral scratchpad (demo) |
 | `message_agent` | Ask another runtime agent (multi-agent) |
+| `request_approval` | Pause for human Y/n before irreversible actions |
 
 Enable tools by name in YAML — the registry resolves them at composition time.
 
@@ -216,9 +262,12 @@ Survivors are expected on a first baseline (many are equivalent string/bound twe
 | Area | Maturity |
 |---|---|
 | Single-agent ReAct harness | Production-shaped reference |
+| Research Desk / Personal Operator | Shipped (`brief` + operator YAML) |
 | Multi-agent coordinator / researcher | Demo-ready |
 | RAG | Optional extra; local Chroma |
-| Observability / HITL / heavy sandbox | Intentionally out of scope (for now) |
+| HITL approvals | Light scaffold (`request_approval` + brief `--approve`) |
+| Self-Harness | Experimental propose/accept only — human gate required |
+| Observability / heavy sandbox | Intentionally out of scope (for now) |
 
 ---
 

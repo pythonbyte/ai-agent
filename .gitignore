@@ -37,6 +37,12 @@ mutants/
 # Local agent state
 .ai_agent/
 
+# Generated research briefs and Self-Harness proposals
+briefs/
+!briefs/.gitkeep
+proposals/
+!proposals/.gitkeep
+
 # Type checking
 .mypy_cache/
 .dmypy.json

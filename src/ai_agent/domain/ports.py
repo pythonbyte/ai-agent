@@ -118,6 +118,15 @@ class AgentMessenger(Protocol):
     ) -> str: ...
 
 
+@runtime_checkable
+class ApprovalGate(Protocol):
+    """Human-in-the-loop approval for irreversible actions."""
+
+    async def request(self, prompt: str) -> bool:
+        """Return True if the user approves the action described by prompt."""
+        ...
+
+
 class IngestDocument(BaseModel):
     """Document payload for ingest pipelines."""
 

@@ -7,6 +7,7 @@ from pathlib import Path
 from ai_agent.application.registry import ToolRegistry
 from ai_agent.domain.ports import (
     AgentMessenger,
+    ApprovalGate,
     HttpFetcher,
     MemoryStore,
     Retriever,
@@ -44,11 +45,12 @@ def build_default_registry(
     retriever: Retriever | None = None,
     messenger: AgentMessenger | None = None,
     messenger_sender_id: str = "coordinator",
+    approval_gate: ApprovalGate | None = None,
 ) -> ToolRegistry:
     """
     Register built-in tools into a fresh registry.
 
-    Optional ports enable memory / retrieve / message_agent when provided.
+    Optional ports enable memory / retrieve / message_agent / request_approval.
     """
     registry = ToolRegistry()
     registry.register(CalculatorTool())
@@ -78,5 +80,10 @@ def build_default_registry(
         registry.register(
             MessageAgentTool(messenger, sender_id=messenger_sender_id),
         )
+
+    if approval_gate is not None:
+        from ai_agent.tools.request_approval import RequestApprovalTool
+
+        registry.register(RequestApprovalTool(approval_gate))
 
     return registry

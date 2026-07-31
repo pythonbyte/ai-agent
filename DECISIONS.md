@@ -78,12 +78,21 @@ Survivors are expected on the first baseline — many are equivalent mutations (
 
 ---
 
+## Personal Operator first
+
+**Chose Research Desk before shopping/trading.** Same harness DNA (tools, memory, citations, light HITL) with a vertical that needs no Gmail/Calendar/checkout. Product surface: `operator.yaml` + `ai-agent brief`. Irreversible actions go through `request_approval` rather than a new `AgentDecision.kind`, keeping the decision schema stable.
+
+## Self-Harness moonshot (experimental)
+
+**Chose a guarded scaffold, not unsupervised self-modification.** Failures are mined into `HarnessPatch` surfaces limited to YAML (`system_prompt` append, `max_tool_rounds`). Accept runs pytest and requires a human CLI step. Arbitrary Python edits and auto-merge are out of v0 — matches “study while touching code” without claiming AGI. Framing and reading list live in the README moonshot section.
+
 ## What this is not
 
 - Not an observability platform
 - Not tied to a single framework beyond OpenAI-compatible HTTP
 - Not a customer-support field collector (that can be a *tool* or a separate config, not the core)
 - Not a free-form multi-agent mesh (synchronous coordinator→specialist ask only)
+- Not an unsupervised self-modifying agent (Self-Harness patches are human-gated config only)
 
 ---
 

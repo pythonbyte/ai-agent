@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import logging
 
-from aioconsole import ainput
+from aioconsole import ainput, aprint
 
 from ai_agent.application.loop import LLMPort, run_tool_loop
 from ai_agent.application.registry import ToolRegistry
+from ai_agent.console_io import restore_blocking_stdio
 from ai_agent.domain.models import AgentConfig, StepResult
 from ai_agent.domain.state import ConversationState
 
@@ -70,6 +71,17 @@ class Agent:
         except Exception as exc:
             logger.exception("agent_step_failed agent_id=%s", self.agent_id)
             session.mark_done()
+            try:
+                from ai_agent.application.self_harness import record_failure
+
+                record_failure(
+                    agent_id=self.agent_id,
+                    message=str(exc),
+                    tool_traces=[t.model_dump() for t in session.tool_traces],
+                    context_summary=f"messages={len(session.messages)}",
+                )
+            except Exception:  # noqa: BLE001 — never block error path on logging
+                logger.debug("failure_record_skipped", exc_info=True)
             return StepResult(
                 message=f"Something went wrong: {exc}",
                 kind="error",
@@ -80,11 +92,14 @@ class Agent:
         """Standalone console loop (owns its own stdin/stdout)."""
         session = session or self.create_session()
         result = await self.step(session, user_input=None)
-        print(f"Assistant: {result.message}")
+        # ainput leaves stdout non-blocking; restore before large writes.
+        restore_blocking_stdio()
+        await aprint(f"Assistant: {result.message}", flush=True)
 
         while not session.done:
             user_input = await ainput("You: ")
             result = await self.step(session, user_input=user_input)
-            print(f"Assistant: {result.message}")
+            restore_blocking_stdio()
+            await aprint(f"Assistant: {result.message}", flush=True)
             if result.kind in {"done", "error"}:
                 break

@@ -75,7 +75,9 @@ class AgentRuntime:
         self._running = False
 
     def _default_output_handler(self, agent_id: str, result: StepResult) -> None:
-        print(f"[{agent_id}] Assistant: {result.message}")
+        from ai_agent.console_io import console_print
+
+        console_print(f"[{agent_id}] Assistant: {result.message}")
 
     def register(self, agent_id: str, agent: Agent) -> asyncio.Queue[RuntimeMessage]:
         if agent_id in self._contexts:
