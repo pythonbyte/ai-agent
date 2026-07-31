@@ -119,6 +119,7 @@ ai-agent -c config/agent_config.yaml
 | One-shot brief | `uv run ai-agent brief "agent harness"` | Writes `briefs/YYYYMMDD_slug.md` |
 | Brief + approve | `uv run ai-agent brief "topic" --approve` | Console Y/n before write |
 | WebSocket | `uv run ai-agent --server -v` then `websocat ws://localhost:8765` | Chat-style plain text replies |
+| Docker WebSocket | `docker compose up --build` then `websocat ws://localhost:8765` | Agent runs in container; terminal client on host |
 | Multi-agent | `uv run ai-agent --multi-agent -v` | Coordinator + researcher handoff |
 | RAG ingest | `uv run ai-agent ingest --docs docs/` | Needs `[rag]` extra |
 | Harness propose | `uv run ai-agent harness propose` | Mine `.ai_agent/failures` → `proposals/` |
@@ -234,6 +235,54 @@ class EchoTool(BaseTool):
 ```
 
 Register at the composition root (see [`examples/custom_tool.py`](examples/custom_tool.py)).
+
+---
+
+## Run in Docker (terminal ↔ container)
+
+Architecture:
+
+```text
+Your terminal  --WebSocket-->  localhost:8765  -->  Docker (ai-agent --server)
+```
+
+The CLI console (`ai-agent` without `--server`) needs a TTY inside the container and is awkward for “type on host → reply from Docker.” Use the **WebSocket server** instead.
+
+```bash
+# 1) Ensure .env has OPENROUTER_API_KEY
+cp -n .env.example .env
+
+# 2) Start the agent server in Docker
+docker compose up --build
+
+# 3) From another terminal on the host, chat:
+websocat ws://localhost:8765
+# type a message, Enter → agent reply comes back as plain text
+```
+
+Without `websocat`:
+
+```bash
+# one-shot with Python
+python - <<'PY'
+import asyncio, websockets
+async def main():
+    async with websockets.connect("ws://localhost:8765") as ws:
+        print(await ws.recv())          # greeting
+        await ws.send("What is 2+2? Use tools if needed.")
+        print(await ws.recv())
+asyncio.run(main())
+PY
+```
+
+Operator persona in Docker:
+
+```bash
+docker compose run --service-ports agent \
+  ai-agent --server --host 0.0.0.0 --port 8765 -c config/agents/operator.yaml -v
+```
+
+**Requirement:** server must listen on `0.0.0.0` (compose already does). `localhost` inside the container would not accept host connections.
 
 ---
 

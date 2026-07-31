@@ -1,0 +1,23 @@
+services:
+  agent:
+    build: .
+    ports:
+      - "8765:8765"
+    env_file:
+      - .env
+    volumes:
+      # Persist sessions / memory / chroma across restarts
+      - ./data/ai_agent:/app/.ai_agent
+      - ./config:/app/config:ro
+    command:
+      [
+        "ai-agent",
+        "--server",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8765",
+        "-c",
+        "config/agent_config.yaml",
+        "-v",
+      ]

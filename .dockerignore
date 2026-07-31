@@ -1,0 +1,21 @@
+# Build context exclusions for Docker images.
+.git
+.venv
+.mypy_cache
+.pytest_cache
+.ruff_cache
+.mutants
+.ai_agent
+briefs
+proposals
+__pycache__
+*.pyc
+.env
+.env.*
+!.env.example
+dist
+build
+*.egg-info
+.coverage
+htmlcov
+.DS_Store

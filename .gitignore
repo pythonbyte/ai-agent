@@ -36,6 +36,7 @@ mutants/
 
 # Local agent state
 .ai_agent/
+data/
 
 # Generated research briefs and Self-Harness proposals
 briefs/
