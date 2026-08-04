@@ -120,24 +120,31 @@ def build_default_registry(
         )
 
     if include_engineer_tools:
+        from ai_agent.harness.touch_tracker import TouchTracker
         from ai_agent.tools.apply_patch import ApplyPatchTool
         from ai_agent.tools.git_tools import GitCommitTool, GitDiffTool, GitStatusTool
         from ai_agent.tools.open_pr import OpenPullRequestTool
+        from ai_agent.tools.replace_in_file import ReplaceInFileTool
         from ai_agent.tools.run_checks import RunChecksTool
         from ai_agent.tools.workspace_list import WorkspaceListTool
+        from ai_agent.tools.write_file import WriteFileTool
 
-        writer = workspace_writer or WorkspaceWriterFS(root, policy=path_policy or PathPolicy())
+        policy = path_policy or PathPolicy()
+        writer = workspace_writer or WorkspaceWriterFS(root, policy=policy)
         runner = test_runner or SubprocessTestRunner(cwd=root)
-        git = git_port or GitCliAdapter(cwd=root)
+        git = git_port or GitCliAdapter(cwd=root, policy=policy)
         prs = pr_port or GhPullRequestAdapter(cwd=root)
+        tracker = TouchTracker()
 
         registry.register(WorkspaceListTool(writer))
-        registry.register(ApplyPatchTool(writer))
+        registry.register(ApplyPatchTool(writer, tracker=tracker))
+        registry.register(WriteFileTool(writer, tracker=tracker))
+        registry.register(ReplaceInFileTool(writer, tracker=tracker))
         registry.register(RunChecksTool(runner))
         registry.register(GitStatusTool(git))
-        registry.register(GitDiffTool(git))
+        registry.register(GitDiffTool(git, tracker=tracker))
         if approval_gate is not None:
-            registry.register(GitCommitTool(git, approval_gate))
+            registry.register(GitCommitTool(git, approval_gate, tracker=tracker))
             registry.register(OpenPullRequestTool(prs, git, approval_gate))
 
     return registry

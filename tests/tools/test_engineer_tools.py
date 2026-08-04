@@ -33,6 +33,9 @@ async def test_engineer_tools_in_registry(tmp_path: Path) -> None:
     ):
         assert registry.has(name)
 
+    assert registry.has("write_file")
+    assert registry.has("replace_in_file")
+
 
 @pytest.mark.asyncio
 async def test_workspace_list_and_apply(tmp_path: Path) -> None:

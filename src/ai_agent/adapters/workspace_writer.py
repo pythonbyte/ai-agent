@@ -7,6 +7,7 @@ from pathlib import Path
 from ai_agent.adapters.workspace_fs import WorkspaceFS, is_within_root
 from ai_agent.domain.path_policy import PathPolicy
 from ai_agent.harness.diff_apply import apply_hunks_to_text, parse_unified_diff
+from ai_agent.harness.text_edit import replace_once
 
 
 class WorkspaceWriterFS(WorkspaceFS):
@@ -38,6 +39,18 @@ class WorkspaceWriterFS(WorkspaceFS):
         abs_path = Path(self.resolve_safe(path))
         abs_path.parent.mkdir(parents=True, exist_ok=True)
         abs_path.write_text(content, encoding="utf-8")
+        return path
+
+    def replace_in_file(self, relative_path: str, old: str, new: str) -> str:
+        path = self.policy.assert_writable(relative_path)
+        abs_path = Path(self.resolve_safe(path))
+        if not abs_path.is_file():
+            raise FileNotFoundError(f"file not found: {path}")
+        original = abs_path.read_text(encoding="utf-8")
+        updated = replace_once(original, old, new)
+        if len(updated.encode("utf-8")) > self.policy.max_file_bytes:
+            raise ValueError(f"content exceeds max_file_bytes ({self.policy.max_file_bytes})")
+        abs_path.write_text(updated, encoding="utf-8")
         return path
 
     def apply_unified_diff(self, patch_text: str) -> list[str]:

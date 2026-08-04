@@ -1,16 +1,24 @@
-"""Git CLI adapter (no force push, no main push)."""
+"""Git CLI adapter (no force push, no main push, no git add -A)."""
 
 from __future__ import annotations
 
 import subprocess
 from pathlib import Path
 
+from ai_agent.domain.path_policy import PathPolicy
+
 
 class GitCliAdapter:
     """Thin git wrapper for evolve publishes."""
 
-    def __init__(self, *, cwd: str | Path = ".") -> None:
+    def __init__(
+        self,
+        *,
+        cwd: str | Path = ".",
+        policy: PathPolicy | None = None,
+    ) -> None:
         self.cwd = Path(cwd)
+        self.policy = policy or PathPolicy()
 
     def _run(self, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
@@ -25,8 +33,11 @@ class GitCliAdapter:
         result = self._run("status", "--short", check=False)
         return (result.stdout or "") + (result.stderr or "")
 
-    def diff(self, *, staged: bool = False) -> str:
+    def diff(self, *, staged: bool = False, paths: list[str] | None = None) -> str:
         args = ["diff", "--staged"] if staged else ["diff"]
+        if paths:
+            args.append("--")
+            args.extend(paths)
         result = self._run(*args, check=False)
         return result.stdout or ""
 
@@ -40,16 +51,31 @@ class GitCliAdapter:
             raise ValueError("refusing to create protected branch name")
         self._run("checkout", "-B", cleaned)
 
-    def commit(self, message: str) -> str:
+    def _normalize_commit_paths(self, paths: list[str]) -> list[str]:
+        if not paths:
+            raise ValueError(
+                "commit paths required — refusing git add -A. "
+                "Pass only files touched by this evolve edit."
+            )
+        normalized: list[str] = []
+        for raw in paths:
+            path = self.policy.assert_writable(str(raw).strip())
+            if path not in normalized:
+                normalized.append(path)
+        return normalized
+
+    def commit(self, message: str, paths: list[str] | None = None) -> str:
         msg = message.strip()
         if not msg:
             raise ValueError("commit message required")
-        self._run("add", "-A")
-        # Allow empty? No — fail clearly
-        status = self._run("status", "--porcelain", check=False)
+        to_add = self._normalize_commit_paths(list(paths or []))
+        self._run("add", "--", *to_add)
+        status = self._run("status", "--porcelain", "--", *to_add, check=False)
         if not (status.stdout or "").strip():
-            raise ValueError("nothing to commit")
-        self._run("commit", "-m", msg)
+            raise ValueError(
+                "nothing to commit for scoped paths: " + ", ".join(to_add)
+            )
+        self._run("commit", "-m", msg, "--", *to_add)
         sha = self._run("rev-parse", "HEAD")
         return sha.stdout.strip()
 

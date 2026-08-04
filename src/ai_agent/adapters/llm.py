@@ -1,10 +1,11 @@
-"""OpenRouter LLM adapter with structured JSON output and retries."""
+"""OpenAI-compatible LLM adapter (OpenRouter or OpenAI) with structured JSON + retries."""
 
 from __future__ import annotations
 
 import asyncio
 import logging
 import os
+from dataclasses import dataclass
 from typing import TypeVar
 
 import httpx
@@ -15,20 +16,115 @@ logger = logging.getLogger(__name__)
 T = TypeVar("T", bound=BaseModel)
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+OPENAI_URL = "https://api.openai.com/v1/chat/completions"
 DEFAULT_MAX_RETRIES = 3
 DEFAULT_TIMEOUT_SECONDS = 60.0
+DEFAULT_MAX_TOKENS = 4096
 
 
 class LLMError(RuntimeError):
     """Raised when the LLM provider fails after retries."""
 
 
+@dataclass(frozen=True)
+class LLMSettings:
+    """Resolved HTTP endpoint + credentials for an OpenAI-compatible chat API."""
+
+    provider: str
+    base_url: str
+    api_key: str
+    model: str
+
+
+def normalize_model_for_provider(model: str, provider: str) -> str:
+    """
+    Map YAML model ids across providers.
+
+    OpenRouter often uses ``openai/gpt-4o-mini``; OpenAI expects ``gpt-4o-mini``.
+    """
+    cleaned = model.strip()
+    if provider == "openai" and cleaned.startswith("openai/"):
+        return cleaned.removeprefix("openai/")
+    return cleaned
+
+
+def resolve_llm_settings(
+    model: str,
+    *,
+    api_key: str | None = None,
+    base_url: str | None = None,
+    provider: str | None = None,
+) -> LLMSettings:
+    """
+    Choose OpenAI vs OpenRouter from env / explicit overrides.
+
+    Priority:
+    1. Explicit ``provider`` / ``LLM_PROVIDER`` (``openai`` | ``openrouter``)
+    2. Explicit ``base_url`` / ``LLM_BASE_URL`` (implies custom OpenAI-compatible)
+    3. If only ``OPENAI_API_KEY`` is set → OpenAI
+    4. Else OpenRouter (``OPENROUTER_API_KEY``)
+    """
+    env_provider = (provider or os.getenv("LLM_PROVIDER") or "").strip().lower()
+    env_base = (base_url or os.getenv("LLM_BASE_URL") or "").strip()
+
+    if env_provider in {"openai", "openrouter"}:
+        chosen = env_provider
+    elif env_base:
+        chosen = "custom"
+    elif api_key:
+        # Explicit key passed by caller — keep OpenRouter URL unless base overridden
+        chosen = "openrouter"
+    elif os.getenv("OPENAI_API_KEY") and not os.getenv("OPENROUTER_API_KEY"):
+        chosen = "openai"
+    elif os.getenv("OPENAI_API_KEY") and env_provider == "openai":
+        chosen = "openai"
+    else:
+        chosen = "openrouter"
+
+    if chosen == "openai":
+        key = api_key or os.getenv("OPENAI_API_KEY") or ""
+        url = env_base or OPENAI_URL
+        if not key:
+            raise ValueError(
+                "OPENAI_API_KEY is not set. Export it or set LLM_PROVIDER=openai with a key."
+            )
+        return LLMSettings(
+            provider="openai",
+            base_url=url,
+            api_key=key,
+            model=normalize_model_for_provider(model, "openai"),
+        )
+
+    if chosen == "custom":
+        key = api_key or os.getenv("LLM_API_KEY") or os.getenv("OPENAI_API_KEY") or ""
+        if not key:
+            raise ValueError("LLM_API_KEY or OPENAI_API_KEY required with LLM_BASE_URL")
+        return LLMSettings(
+            provider="custom",
+            base_url=env_base,
+            api_key=key,
+            model=model.strip(),
+        )
+
+    key = api_key or os.getenv("OPENROUTER_API_KEY") or ""
+    if not key:
+        raise ValueError(
+            "OPENROUTER_API_KEY is not set. Export it, or set LLM_PROVIDER=openai "
+            "with OPENAI_API_KEY to use OpenAI directly."
+        )
+    return LLMSettings(
+        provider="openrouter",
+        base_url=env_base or OPENROUTER_URL,
+        api_key=key,
+        model=model.strip(),
+    )
+
+
 class OpenRouterLLM:
     """
     Infrastructure adapter implementing the application LLMPort.
 
-    Uses OpenRouter's OpenAI-compatible HTTP API so we control retries,
-    timeouts, and JSON parsing without SDK lock-in.
+    OpenAI-compatible HTTP (OpenRouter by default, or OpenAI via LLM_PROVIDER=openai).
     """
 
     def __init__(
@@ -38,13 +134,29 @@ class OpenRouterLLM:
         api_key: str | None = None,
         max_retries: int = DEFAULT_MAX_RETRIES,
         timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
-        base_url: str = OPENROUTER_URL,
+        base_url: str | None = None,
+        provider: str | None = None,
+        max_tokens: int = DEFAULT_MAX_TOKENS,
     ) -> None:
-        self.model = model
-        self.api_key = api_key or os.getenv("OPENROUTER_API_KEY")
+        settings = resolve_llm_settings(
+            model,
+            api_key=api_key,
+            base_url=base_url,
+            provider=provider,
+        )
+        self.model = settings.model
+        self.api_key = settings.api_key
+        self.base_url = settings.base_url
+        self.provider = settings.provider
         self.max_retries = max_retries
         self.timeout_seconds = timeout_seconds
-        self.base_url = base_url
+        self.max_tokens = max_tokens
+        logger.info(
+            "llm_configured provider=%s model=%s base_url=%s",
+            self.provider,
+            self.model,
+            self.base_url,
+        )
 
     async def complete(
         self,
@@ -52,9 +164,8 @@ class OpenRouterLLM:
         output_model: type[T],
     ) -> T:
         if not self.api_key:
-            raise ValueError("OPENROUTER_API_KEY is not set. Export it or pass api_key=...")
+            raise ValueError("LLM API key is not set")
 
-        # Force JSON-shaped replies that match our Pydantic decision model.
         prompt_messages = [
             *messages,
             {
@@ -82,7 +193,6 @@ class OpenRouterLLM:
                     exc,
                 )
                 if attempt < self.max_retries:
-                    # Feed the validation error back so the model can correct itself.
                     if last_content:
                         prompt_messages = [
                             *prompt_messages,
@@ -104,19 +214,26 @@ class OpenRouterLLM:
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
-            "HTTP-Referer": "https://github.com/pythonbyte/ai-agent",
-            "X-Title": "ai-agent",
         }
-        payload = {
+        if self.provider == "openrouter":
+            headers["HTTP-Referer"] = "https://github.com/pythonbyte/ai-agent"
+            headers["X-Title"] = "ai-agent"
+
+        payload: dict[str, object] = {
             "model": self.model,
             "messages": messages,
             "response_format": {"type": "json_object"},
         }
+        # Newer OpenAI models (gpt-5 / o-series / luna) require max_completion_tokens.
+        # OpenRouter still accepts classic max_tokens for most routed models.
+        if self.provider in {"openai", "custom"}:
+            payload["max_completion_tokens"] = self.max_tokens
+        else:
+            payload["max_tokens"] = self.max_tokens
 
         async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
             response = await client.post(self.base_url, headers=headers, json=payload)
             if response.is_error:
-                # Surface provider body — OpenRouter 400s often explain invalid_prompt.
                 raise httpx.HTTPStatusError(
                     f"{response.status_code} {response.reason_phrase}: {response.text}",
                     request=response.request,

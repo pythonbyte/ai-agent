@@ -61,6 +61,7 @@ class AgentFactory:
                 & {
                     "workspace_list",
                     "apply_patch",
+                    "write_file",
                     "run_checks",
                     "git_status",
                     "git_diff",

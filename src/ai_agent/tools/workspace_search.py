@@ -44,6 +44,24 @@ class WorkspaceSearchTool(BaseTool):
                     description="Optional glob for search (default **/*)",
                     required=False,
                 ),
+                ToolParameter(
+                    name="max_bytes",
+                    type="integer",
+                    description="Max bytes for action=read (default 12000, max 200000)",
+                    required=False,
+                ),
+                ToolParameter(
+                    name="start_line",
+                    type="integer",
+                    description="Optional 1-based start line for action=read",
+                    required=False,
+                ),
+                ToolParameter(
+                    name="end_line",
+                    type="integer",
+                    description="Optional 1-based end line for action=read",
+                    required=False,
+                ),
             ],
         )
         self._reader = reader
@@ -97,8 +115,19 @@ class WorkspaceSearchTool(BaseTool):
                 output="",
                 error="path is required when action=read",
             )
+        max_bytes_raw = arguments.get("max_bytes", 12_000)
         try:
-            text = self._reader.read_text(path.strip(), max_bytes=50_000)
+            max_bytes = int(max_bytes_raw) if max_bytes_raw is not None else 12_000
+        except (TypeError, ValueError):
+            return ToolResult(
+                tool_name=self.name,
+                success=False,
+                output="",
+                error="max_bytes must be an integer",
+            )
+        max_bytes = max(1, min(max_bytes, 200_000))
+        try:
+            text = self._reader.read_text(path.strip(), max_bytes=max_bytes)
         except Exception as exc:  # noqa: BLE001
             return ToolResult(
                 tool_name=self.name,
@@ -106,4 +135,22 @@ class WorkspaceSearchTool(BaseTool):
                 output="",
                 error=str(exc),
             )
+        start_raw = arguments.get("start_line")
+        end_raw = arguments.get("end_line")
+        if start_raw is not None or end_raw is not None:
+            try:
+                start = int(start_raw) if start_raw is not None else 1
+                end = int(end_raw) if end_raw is not None else 10**9
+            except (TypeError, ValueError):
+                return ToolResult(
+                    tool_name=self.name,
+                    success=False,
+                    output="",
+                    error="start_line/end_line must be integers",
+                )
+            lines = text.splitlines(keepends=True)
+            start_i = max(0, start - 1)
+            end_i = min(len(lines), max(start, end))
+            sliced = lines[start_i:end_i]
+            text = f"(lines {start_i + 1}-{start_i + len(sliced)})\n{''.join(sliced)}"
         return ToolResult(tool_name=self.name, success=True, output=text)
