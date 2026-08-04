@@ -24,6 +24,8 @@ class ConversationState(BaseModel):
     tool_traces: list[ToolResult] = Field(default_factory=list)
     done: bool = False
     greeting_sent: bool = False
+    # Last compaction summary (durable hint; full history remains in messages).
+    context_summary: str | None = None
 
     def add_message(
         self,

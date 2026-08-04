@@ -142,3 +142,41 @@ async def test_empty_tool_calls_list(
     result = await agent.step(session, user_input="call nothing")
     assert result.kind == "respond"
     assert "no tool calls" in result.message.lower()
+
+
+@pytest.mark.asyncio
+async def test_compaction_runs_before_decide(
+    sample_config: AgentConfig,
+) -> None:
+    from ai_agent.domain.models import CompactionConfig, Message
+    from ai_agent.harness.compaction import SUMMARY_PREFIX, ContextSummary
+
+    sample_config.compaction = CompactionConfig(
+        enabled=True,
+        max_context_chars=100,
+        keep_recent_messages=1,
+        max_summary_chars=400,
+    )
+    llm = ScriptedLLM(
+        [
+            ContextSummary(summary="Earlier: long research about orchards."),
+            AgentDecision(kind="respond", message="Done."),
+        ]
+    )
+    agent = make_agent(sample_config, llm)
+    session = ConversationState(
+        greeting_sent=True,
+        messages=[
+            Message(role="user", content="old " * 40),
+            Message(role="assistant", content="old " * 40),
+        ],
+    )
+    result = await agent.step(session, user_input="wrap up")
+    assert result.kind == "respond"
+    assert result.message == "Done."
+    assert len(llm.calls) == 2  # summary + decide
+    decide_messages = llm.calls[1]
+    assert any(SUMMARY_PREFIX in m.get("content", "") for m in decide_messages)
+    assert session.context_summary is not None
+    # Full history still grows (system + prior + new user + assistant respond)
+    assert len(session.messages) >= 4

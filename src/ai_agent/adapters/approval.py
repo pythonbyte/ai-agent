@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import sys
 
@@ -22,11 +23,23 @@ class AutoApprovalGate:
 
 
 class ConsoleApprovalGate:
-    """Ask Y/n on stdin (aioconsole when available)."""
+    """Ask Y/n on stdin (serialized — never concurrent ainput)."""
+
+    def __init__(self) -> None:
+        self._lock = asyncio.Lock()
 
     async def request(self, prompt: str) -> bool:
         from aioconsole import ainput
 
-        print(f"\n[approval] {prompt}", file=sys.stderr, flush=True)
-        answer = await ainput("Approve? [y/N]: ")
-        return answer.strip().lower() in {"y", "yes"}
+        from ai_agent.support.console_io import restore_blocking_stdio
+
+        async with self._lock:
+            print(f"\n[approval] {prompt}", file=sys.stderr, flush=True)
+            try:
+                answer = await ainput("Approve? [y/N]: ")
+            except EOFError:
+                logger.warning("approval_eof — treating as denied")
+                return False
+            finally:
+                restore_blocking_stdio()
+            return answer.strip().lower() in {"y", "yes"}

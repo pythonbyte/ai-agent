@@ -128,9 +128,9 @@ def load_proposal(proposal_id: str, proposals_dir: Path = DEFAULT_PROPOSALS_DIR)
 def run_validation_tests(*, pytest_args: list[str] | None = None) -> tuple[bool, str]:
     """Run a focused pytest subset; return (ok, output)."""
     args = pytest_args or [
-        "tests/test_tool_args.py",
-        "tests/test_agent_decision.py",
-        "tests/test_brief.py",
+        "tests/harness/test_tool_args.py",
+        "tests/domain/test_agent_decision.py",
+        "tests/features/brief/test_brief.py",
         "-q",
     ]
     completed = subprocess.run(  # noqa: S603 — intentional local test gate

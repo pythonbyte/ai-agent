@@ -10,6 +10,11 @@ greeting: "Hello! I'm your tool-using assistant. Ask me to calculate, run Python
 workspace_root: "."
 sqlite_path: ".ai_agent/state.db"
 chroma_path: ".ai_agent/chroma"
+compaction:
+  enabled: true
+  max_context_chars: 48000
+  keep_recent_messages: 12
+  max_summary_chars: 4000
 tools:
   - calculator
   - run_python

@@ -14,6 +14,20 @@ class Personality(BaseModel):
     style: str = "concise"
 
 
+class CompactionConfig(BaseModel):
+    """
+    Context packing budget for long-running turns.
+
+    Full history stays in ConversationState; only the packed wire view is sent
+    to the model. Prefer summarizing old turns over dropping them.
+    """
+
+    enabled: bool = True
+    max_context_chars: int = Field(default=48_000, ge=100)
+    keep_recent_messages: int = Field(default=12, ge=1)
+    max_summary_chars: int = Field(default=4_000, ge=50)
+
+
 class AgentConfig(BaseModel):
     """
     External agent configuration (YAML/JSON).
@@ -30,6 +44,7 @@ class AgentConfig(BaseModel):
     workspace_root: str = "."
     sqlite_path: str = ".ai_agent/state.db"
     chroma_path: str = ".ai_agent/chroma"
+    compaction: CompactionConfig = Field(default_factory=CompactionConfig)
 
 
 class Message(BaseModel):

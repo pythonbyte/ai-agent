@@ -6,6 +6,8 @@ from typing import Protocol, runtime_checkable
 
 from pydantic import BaseModel, Field
 
+from ai_agent.domain.models import CompactionConfig
+from ai_agent.domain.platform import CheckResult
 from ai_agent.domain.state import ConversationState
 
 
@@ -127,6 +129,32 @@ class ApprovalGate(Protocol):
         ...
 
 
+class PackedContext(BaseModel):
+    """Wire-format messages produced by a ContextPacker (may be compacted)."""
+
+    messages: list[dict[str, str]]
+    compacted: bool = False
+    summary: str | None = None
+    original_chars: int = 0
+    packed_chars: int = 0
+
+
+@runtime_checkable
+class ContextPacker(Protocol):
+    """
+    Build the message list sent to the LLM for one decide step.
+
+    Must not destroy ConversationState history — packing is a read-side view.
+    """
+
+    async def pack(
+        self,
+        state: ConversationState,
+        *,
+        budget: CompactionConfig,
+    ) -> PackedContext: ...
+
+
 class CodeExecutionResult(BaseModel):
     """Outcome of a sandboxed code run."""
 
@@ -143,6 +171,103 @@ class CodeExecutor(Protocol):
     """Execute a short code snippet and return captured I/O."""
 
     async def run(self, code: str, *, timeout_seconds: float = 5.0) -> CodeExecutionResult: ...
+
+
+@runtime_checkable
+class WorkspaceWriter(Protocol):
+    """Sandboxed writes under a PathPolicy (apply patch / write text)."""
+
+    def write_text(self, relative_path: str, content: str) -> str:
+        """Write file; return relative path written."""
+        ...
+
+    def apply_unified_diff(self, patch_text: str) -> list[str]:
+        """Apply a unified diff; return list of touched relative paths."""
+        ...
+
+    def list_paths(self, *, glob_pattern: str = "**/*", max_results: int = 200) -> list[str]:
+        """List relative file paths under the workspace root."""
+        ...
+
+
+@runtime_checkable
+class TestRunner(Protocol):
+    """Run verification commands (pytest/ruff/mypy)."""
+
+    async def run(self, command: list[str], *, timeout_seconds: float = 120.0) -> CheckResult: ...
+
+
+@runtime_checkable
+class GitPort(Protocol):
+    """Minimal git operations for evolve publishes."""
+
+    def status(self) -> str: ...
+
+    def diff(self, *, staged: bool = False) -> str: ...
+
+    def create_branch(self, name: str) -> None: ...
+
+    def commit(self, message: str) -> str:
+        """Stage allowlisted changes and commit; return commit sha."""
+        ...
+
+    def push_branch(self, name: str) -> None: ...
+
+    def current_branch(self) -> str: ...
+
+
+@runtime_checkable
+class PullRequestPort(Protocol):
+    """Open (and optionally merge) pull requests."""
+
+    def create_pr(
+        self,
+        *,
+        title: str,
+        body: str,
+        head: str,
+        base: str = "main",
+    ) -> str:
+        """Return PR URL."""
+        ...
+
+    def merge_pr(self, pr_url: str) -> None: ...
+
+    def wait_checks(
+        self,
+        pr_url: str,
+        *,
+        timeout_seconds: float = 600.0,
+    ) -> bool:
+        """Return True if checks are green."""
+        ...
+
+
+@runtime_checkable
+class SchedulerPort(Protocol):
+    """Schedule organism wake-ups (file/cron backed)."""
+
+    def schedule_wake(self, *, at_iso: str, payload: str) -> None: ...
+
+    def clear(self) -> None: ...
+
+    def is_stopped(self) -> bool: ...
+
+
+@runtime_checkable
+class AgentSpawner(Protocol):
+    """Dynamic sub-agent spawn via the runtime."""
+
+    async def spawn(
+        self,
+        role: str,
+        message: str,
+        *,
+        sender: str,
+        depth: int = 0,
+    ) -> str:
+        """Spawn (or reuse) a role agent, ask ``message``, return reply."""
+        ...
 
 
 class IngestDocument(BaseModel):

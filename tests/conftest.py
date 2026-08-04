@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
+from pydantic import BaseModel
 
 from ai_agent.domain.models import AgentConfig, AgentDecision, Personality, ToolCallRequest
 from ai_agent.domain.state import ConversationState
@@ -36,9 +37,9 @@ def session() -> ConversationState:
 
 
 class ScriptedLLM:
-    """Deterministic LLM stand-in that returns a scripted sequence of decisions."""
+    """Deterministic LLM stand-in that returns a scripted sequence of model outputs."""
 
-    def __init__(self, decisions: list[AgentDecision]) -> None:
+    def __init__(self, decisions: list[Any]) -> None:
         self._decisions = list(decisions)
         self.calls: list[list[dict[str, str]]] = []
 
@@ -51,7 +52,13 @@ class ScriptedLLM:
         if not self._decisions:
             raise AssertionError("ScriptedLLM has no more decisions")
         decision = self._decisions.pop(0)
-        return output_model.model_validate(decision.model_dump())
+        if isinstance(decision, output_model):
+            return decision
+        if isinstance(decision, BaseModel):
+            return output_model.model_validate(decision.model_dump())
+        if isinstance(decision, dict):
+            return output_model.model_validate(decision)
+        raise TypeError(f"Unsupported scripted decision type: {type(decision)!r}")
 
 
 @pytest.fixture

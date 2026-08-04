@@ -76,16 +76,22 @@ class BaseTool:
     name: str
     description: str
     parameters: list[ToolParameter]
+    # When False, the registry must not fan-out this tool with asyncio.gather
+    # (HITL / stdin / ordered publish steps).
+    parallel_safe: bool = True
 
     def __init__(
         self,
         name: str,
         description: str,
         parameters: list[ToolParameter] | None = None,
+        *,
+        parallel_safe: bool = True,
     ) -> None:
         self.name = name
         self.description = description
         self.parameters = parameters or []
+        self.parallel_safe = parallel_safe
 
     def spec(self) -> ToolSpec:
         return ToolSpec(

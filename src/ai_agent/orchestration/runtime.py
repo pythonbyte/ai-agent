@@ -15,11 +15,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ai_agent.domain.models import StepResult
+from ai_agent.domain.platform import SpawnBudget
 from ai_agent.domain.ports import SessionStore
 from ai_agent.domain.state import ConversationState
 
 if TYPE_CHECKING:
     from ai_agent.harness.agent import Agent
+    from ai_agent.orchestration.factory import AgentFactory
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +54,9 @@ class AgentContext:
     outbox: asyncio.Queue[tuple[str, StepResult]] = field(default_factory=asyncio.Queue)
     task: asyncio.Task[None] | None = None
     active: bool = True
+    depth: int = 0
+    parent_id: str | None = None
+    ephemeral: bool = False
 
 
 class AgentRuntime:
@@ -59,6 +64,7 @@ class AgentRuntime:
     Orchestration layer: manages agent lifecycle and message routing.
 
     Agents remain pure logic — the runtime owns I/O loops and queues.
+    Supports dynamic spawn with depth/child budgets.
     """
 
     def __init__(
@@ -66,6 +72,8 @@ class AgentRuntime:
         on_agent_output: Callable[[str, StepResult], None] | None = None,
         session_store: SessionStore | None = None,
         ask_timeout_seconds: float = DEFAULT_ASK_TIMEOUT_SECONDS,
+        spawn_budget: SpawnBudget | None = None,
+        agent_factory: AgentFactory | None = None,
     ) -> None:
         self._contexts: dict[str, AgentContext] = {}
         self._on_agent_output = on_agent_output or self._default_output_handler
@@ -73,6 +81,10 @@ class AgentRuntime:
         self._ask_timeout_seconds = ask_timeout_seconds
         self._pending_asks: dict[str, list[asyncio.Future[StepResult]]] = defaultdict(list)
         self._running = False
+        self._spawn_budget = spawn_budget or SpawnBudget()
+        self._agent_factory = agent_factory
+        self._children: dict[str, list[str]] = defaultdict(list)
+        self._spawn_seq = 0
 
     def _default_output_handler(self, agent_id: str, result: StepResult) -> None:
         from ai_agent.support.console_io import console_print
@@ -172,14 +184,85 @@ class AgentRuntime:
             return f"Error: timed out waiting for {target_id}"
         return result.message
 
+    def set_factory(self, factory: AgentFactory) -> None:
+        self._agent_factory = factory
+
+    async def spawn(
+        self,
+        role: str,
+        message: str,
+        *,
+        sender: str,
+        depth: int = 0,
+    ) -> str:
+        """
+        Dynamically create a role agent, ask it, optionally reap ephemeral child.
+
+        Enforces SpawnBudget max_depth and max_children per parent.
+        """
+        if self._agent_factory is None:
+            return "Error: agent factory not configured for spawn"
+        if depth >= self._spawn_budget.max_depth:
+            return f"Error: spawn depth limit ({self._spawn_budget.max_depth}) exceeded"
+        parent_children = self._children[sender]
+        if len(parent_children) >= self._spawn_budget.max_children:
+            return (
+                f"Error: spawn child limit ({self._spawn_budget.max_children}) "
+                f"exceeded for {sender}"
+            )
+
+        self._spawn_seq += 1
+        child_id = f"{role}-{self._spawn_seq}"
+        try:
+            agent = self._agent_factory.create(
+                role,
+                agent_id=child_id,
+                messenger_sender_id=child_id,
+            )
+        except Exception as exc:  # noqa: BLE001
+            return f"Error: failed to spawn role={role}: {exc}"
+
+        # Re-bind spawn tool at child depth+1 if messenger is this runtime
+        from ai_agent.tools.spawn_agent import SpawnAgentTool
+
+        if not agent.registry.has("spawn_agent"):
+            agent.registry.register(
+                SpawnAgentTool(self, sender_id=child_id, depth=depth + 1)
+            )
+
+        self.register(child_id, agent)
+        ctx = self._contexts[child_id]
+        ctx.depth = depth + 1
+        ctx.parent_id = sender
+        ctx.ephemeral = True
+        # Skip deterministic greeting so ask() is not raced by the first publish.
+        ctx.session.greeting_sent = True
+        self._children[sender].append(child_id)
+        await self.start_agent(child_id)
+        # Let the loop enter inbox.wait before we ask (no greeting race).
+        await asyncio.sleep(0)
+        try:
+            reply = await self.ask(
+                child_id,
+                message,
+                sender=sender,
+            )
+        finally:
+            await self.stop_agent(child_id)
+            self.unregister(child_id)
+            if child_id in self._children[sender]:
+                self._children[sender].remove(child_id)
+        return reply
+
     async def _run_agent_loop(self, agent_id: str) -> None:
         context = self._contexts[agent_id]
         agent = context.agent
         logger.info("Starting agent loop: %s", agent_id)
 
         try:
-            # Skip greeting LLM path if session already has history (reloaded).
-            if not context.session.messages:
+            # Skip greeting LLM path if session already has history (reloaded)
+            # or for ephemeral spawn children (ask provides the first turn).
+            if not context.session.messages and not context.ephemeral:
                 result = await agent.step(session=context.session, user_input=None)
                 self._publish_result(agent_id, result)
         except Exception as exc:

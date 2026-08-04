@@ -9,8 +9,10 @@ from typing import Protocol, TypeVar
 from pydantic import BaseModel
 
 from ai_agent.domain.models import AgentConfig, AgentDecision, Message, StepResult
+from ai_agent.domain.ports import ContextPacker
 from ai_agent.domain.state import ConversationState
 from ai_agent.domain.tool import ToolResult
+from ai_agent.harness.compaction import SummarizingCompactor
 from ai_agent.harness.registry import ToolRegistry
 
 logger = logging.getLogger(__name__)
@@ -93,11 +95,13 @@ async def run_tool_loop(
     llm: LLMPort,
     registry: ToolRegistry,
     user_input: str | None,
+    context_packer: ContextPacker | None = None,
 ) -> StepResult:
     """
     Execute one user turn: optional greeting, then decide/act until respond/done.
 
     Bounded by config.max_tool_rounds to prevent runaway tool loops.
+    Context packing (compaction) runs before each LLM decide call.
     """
     if not state.greeting_sent and user_input is None:
         greeting = config.greeting or "Hello! How can I help you today?"
@@ -110,11 +114,13 @@ async def run_tool_loop(
 
     _ensure_system_prompt(state, config, registry)
 
+    packer: ContextPacker = context_packer or SummarizingCompactor(llm)
     collected: list[ToolResult] = []
 
     for rounds in range(1, config.max_tool_rounds + 1):
         logger.info("agent_loop round=%s", rounds)
-        decision = await llm.complete(state.as_chat_dicts(), AgentDecision)
+        packed = await packer.pack(state, budget=config.compaction)
+        decision = await llm.complete(packed.messages, AgentDecision)
 
         if decision.kind == "call_tools":
             if not decision.tool_calls:
@@ -128,8 +134,10 @@ async def run_tool_loop(
                 )
 
             observations: list[str] = []
-            for call in decision.tool_calls:
-                result = await registry.execute(call.name, call.arguments)
+            # Fan-out independent tool calls concurrently (async gather).
+            batch = [(c.name, dict(c.arguments)) for c in decision.tool_calls]
+            results = await registry.execute_many(batch)
+            for result in results:
                 collected.append(result)
                 state.tool_traces.append(result)
                 observations.append(

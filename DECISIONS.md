@@ -32,6 +32,10 @@ Native provider tool-calling APIs differ. A single `AgentDecision` schema (`resp
 
 `max_tool_rounds` prevents runaway loops when the model keeps calling tools. When the budget is exhausted, the agent returns a fallback summary instead of hanging.
 
+### Context compaction (not truncation)
+
+**Chose summarize-over-drop.** `ConversationState` keeps the full transcript (and SQLite can persist it). `SummarizingCompactor` builds a smaller *wire* view when `compaction.max_context_chars` is exceeded: keep system + recent messages, replace the middle with a summary. That mirrors the ARC-AGI harness lesson: rolling truncation deletes evidence; compaction preserves it in compressed form. Provider “retained reasoning” is separate and requires Responses-API-style features.
+
 ### Async-first runtime
 
 Each agent runs in its own coroutine with dedicated queues. The WebSocket adapter and console CLI are interchangeable I/O surfaces over the same `Agent.step()`.
@@ -92,13 +96,25 @@ Survivors are expected on the first baseline — many are equivalent mutations (
 
 **Chose a deny-listed subprocess for `run_python`.** Enough for local agent computation (math, transforms) with timeout and output caps. Not a multi-tenant sandbox — escalate to containers when running untrusted code at scale.
 
+## Self-Evolving Engineer + HarnessBank
+
+**Thesis:** \(A_H = M \circ H\) with **M frozen**; only **H** evolves under verification ([HarnessBank](https://arxiv.org/abs/2607.13683)).
+
+**Chose HITL PR for Phase 1.** `ai-agent evolve` runs the engineer persona: survey → plan → `apply_patch` → `run_checks` → approve → commit → PR. Humans merge. PathPolicy jail blocks `.env`, `.git/`, and kernel modules (`path_policy`, platform merge surfaces).
+
+**Chose separate evolver ≠ task agent.** Gene Bank cells live under `.ai_agent/gene_bank/(where)__(why)/` with gated screening (validity → activation → significance → gain). Kernel \(K\) (policies, STOP, screening) is immutable to the evolver; surface \(X\) (prompts, YAML budgets) is mutable.
+
+**Phase 2 organism:** `evolve-worker` + `FileScheduler` + `MergePolicy.may_merge` + CI wait via `gh`. STOP file under `.ai_agent/evolve/STOP` is the kill switch. Auto-merge never ships without policy.
+
+**Ops:** structured `OpsEvent` JSONL + `ops events` / `ops replay` for cost/latency/success attribution at log level.
+
 ## What this is not
 
 - Not an observability platform
 - Not tied to a single framework beyond OpenAI-compatible HTTP
 - Not a customer-support field collector (that can be a *tool* or a separate config, not the core)
-- Not a free-form multi-agent mesh (synchronous coordinator→specialist ask only)
-- Not an unsupervised self-modifying agent (Self-Harness patches are human-gated config only)
+- Not CrewAI/LangGraph glue — we compete on typed harness quality, not DX sugar
+- Not unsupervised “no brakes” self-modification (evolver cannot mute \(K\))
 
 ---
 

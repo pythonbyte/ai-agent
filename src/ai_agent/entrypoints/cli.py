@@ -1,4 +1,4 @@
-"""CLI entrypoints for console, WebSocket, brief, ingest, multi-agent, harness."""
+"""CLI entrypoints for console, WebSocket, brief, ingest, multi-agent, harness, evolve."""
 
 from __future__ import annotations
 
@@ -18,11 +18,21 @@ from ai_agent.adapters.chroma_retriever import (
 )
 from ai_agent.adapters.config_loader import ConfigError, load_agent_config
 from ai_agent.adapters.embedder import OpenRouterEmbedder
+from ai_agent.adapters.gh_pr import GhPullRequestAdapter
+from ai_agent.adapters.git_cli import GitCliAdapter
 from ai_agent.adapters.llm import OpenRouterLLM
 from ai_agent.adapters.server import WebSocketServer
 from ai_agent.adapters.sqlite_store import SqliteStore
+from ai_agent.domain.platform import GeneCell, MergePolicy
 from ai_agent.domain.ports import ApprovalGate, Retriever
 from ai_agent.features.brief.service import run_research_brief
+from ai_agent.features.evolve.organism import ensure_organism, worker_tick
+from ai_agent.features.evolve.service import run_evolve, save_organism
+from ai_agent.features.harness_bank.bank import (
+    admit_if_screened,
+    list_cells,
+    screen_candidate,
+)
 from ai_agent.features.self_harness.service import (
     accept_harness_patch,
     load_failures,
@@ -30,6 +40,8 @@ from ai_agent.features.self_harness.service import (
     record_failure,
 )
 from ai_agent.harness.agent import Agent
+from ai_agent.harness.ops_metrics import compare_harness_versions, load_ops_events, replay_trace
+from ai_agent.orchestration.factory import AgentFactory
 from ai_agent.orchestration.runtime import AgentRuntime
 from ai_agent.support.console_io import console_print
 from ai_agent.tools import build_default_registry
@@ -64,6 +76,20 @@ def _build_retriever(chroma_path: str) -> Retriever:
         return InMemoryRetriever(embedder)
 
 
+_ENGINEER_TOOL_NAMES = frozenset(
+    {
+        "workspace_list",
+        "apply_patch",
+        "run_checks",
+        "git_status",
+        "git_diff",
+        "git_commit",
+        "open_pull_request",
+        "spawn_agent",
+    }
+)
+
+
 def build_agent(
     config_path: Path,
     agent_id: str = "agent",
@@ -71,12 +97,16 @@ def build_agent(
     messenger: AgentRuntime | None = None,
     sender_id: str | None = None,
     approval_gate: ApprovalGate | None = None,
+    include_engineer_tools: bool | None = None,
 ) -> Agent:
     """Composition root: wire config, tools, and LLM into an Agent."""
     config = load_agent_config(config_path)
     store = SqliteStore(config.sqlite_path)
     retriever = _build_retriever(config.chroma_path)
     gate = approval_gate or AutoApprovalGate(approve=True)
+    wants_engineer = include_engineer_tools
+    if wants_engineer is None:
+        wants_engineer = bool(set(config.tools or []) & _ENGINEER_TOOL_NAMES)
 
     registry = build_default_registry(
         workspace_root=config.workspace_root,
@@ -85,9 +115,9 @@ def build_agent(
         messenger=messenger,
         messenger_sender_id=sender_id or agent_id,
         approval_gate=gate,
+        include_engineer_tools=wants_engineer,
     )
     selected = registry.select(config.tools) if config.tools else registry
-    # Drop request_approval from select if not in config tools list — already handled.
     llm = OpenRouterLLM(model=config.model)
     return Agent(config=config, llm=llm, registry=selected, agent_id=agent_id)
 
@@ -128,6 +158,12 @@ async def _run_multi_agent(
     coord_cfg = load_agent_config(coordinator_config)
     store = SqliteStore(coord_cfg.sqlite_path)
     runtime = AgentRuntime(on_agent_output=on_output, session_store=store)
+    factory = AgentFactory(
+        agents_dir=coordinator_config.parent,
+        messenger=runtime,
+        approval_gate=ConsoleApprovalGate(),
+    )
+    runtime.set_factory(factory)
 
     researcher = build_agent(researcher_config, agent_id="researcher")
     coordinator = build_agent(
@@ -136,6 +172,13 @@ async def _run_multi_agent(
         messenger=runtime,
         sender_id="coordinator",
     )
+    # Allow coordinator to spawn specialists when spawn_agent is in YAML tools.
+    from ai_agent.tools.spawn_agent import SpawnAgentTool
+
+    if "spawn_agent" in (coordinator.config.tools or []):
+        coordinator.registry.register(
+            SpawnAgentTool(runtime, sender_id="coordinator", depth=0)
+        )
 
     runtime.register("researcher", researcher)
     runtime.register("coordinator", coordinator)
@@ -234,6 +277,98 @@ def _run_harness_command(args: argparse.Namespace) -> None:
     raise ValueError(f"Unknown harness action: {action}")
 
 
+async def _run_evolve(intent: str, *, config_path: Path, require_approval: bool) -> None:
+    gate: ApprovalGate
+    if require_approval:
+        gate = ConsoleApprovalGate()
+    else:
+        gate = AutoApprovalGate(approve=True)
+    if config_path == Path("config/agent_config.yaml"):
+        config_path = Path("config/agents/engineer.yaml")
+    agent = build_agent(
+        config_path,
+        agent_id="engineer",
+        approval_gate=gate,
+        include_engineer_tools=True,
+    )
+    run = await run_evolve(intent, agent=agent, approval_gate=gate)
+    organism = ensure_organism(goals=[intent])
+    organism.last_run_id = run.id
+    save_organism(organism)
+    print(f"Evolve run: {run.id} status={run.status}")
+    if run.pr_url:
+        print(f"PR: {run.pr_url}")
+    if run.error:
+        print(f"Error: {run.error}", file=sys.stderr)
+
+
+def _run_evolve_worker(*, auto_merge: bool) -> None:
+    status = worker_tick(
+        pr_port=GhPullRequestAdapter() if auto_merge else None,
+        git=GitCliAdapter() if auto_merge else None,
+        policy=MergePolicy() if auto_merge else None,
+        auto_merge=auto_merge,
+    )
+    print(f"Evolve worker: {status}")
+
+
+def _run_harness_bank(args: argparse.Namespace) -> None:
+    action = args.command_arg
+    if action == "list":
+        cells = list_cells()
+        if not cells:
+            print("(gene bank empty)")
+            return
+        for cell in cells:
+            print(f"{cell.id}\t{cell.where}\t{cell.why}\tscore={cell.train_score}")
+        return
+    if action == "screen":
+        # Demo screening admission from CLI flags
+        where = args.where or "prompt"
+        why = args.why or "demo"
+        cell = GeneCell(
+            where=where,  # type: ignore[arg-type]
+            why=why,
+            model_id=args.model_id or "unknown",
+            summary=args.summary or "cli screen",
+            system_prompt_append=args.summary,
+        )
+        screening = screen_candidate(
+            cell,
+            infra_ok=not args.infra_fail,
+            activation_seen=not args.no_activation,
+            sample_score=args.sample_score,
+            parent_score=args.parent_score,
+            repeats_ok=not args.unstable,
+            min_gain=args.min_gain,
+        )
+        path = admit_if_screened(cell, screening)
+        print(f"screening passed={screening.passed} reason={screening.reason}")
+        if path:
+            print(f"admitted: {path}")
+        return
+    if action == "compare":
+        result = compare_harness_versions(args.parent_score, args.sample_score)
+        print(result)
+        return
+    raise ValueError("harness-bank requires: list | screen | compare")
+
+
+def _run_ops(args: argparse.Namespace) -> None:
+    action = args.command_arg
+    if action == "events":
+        events = load_ops_events(name=args.event_name, limit=args.limit)
+        for event in events:
+            print(event.model_dump_json())
+        return
+    if action == "replay":
+        if not args.command_arg2:
+            raise ValueError("ops replay requires a trace JSON path")
+        print(replay_trace(Path(args.command_arg2)))
+        return
+    raise ValueError("ops requires: events | replay <path>")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="ai-agent",
@@ -271,20 +406,20 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "command",
         nargs="?",
-        choices=["ingest", "brief", "harness"],
+        choices=["ingest", "brief", "harness", "evolve", "evolve-worker", "harness-bank", "ops"],
         help="Optional subcommand",
     )
     parser.add_argument(
         "command_arg",
         nargs="?",
         default=None,
-        help="Topic for brief, or harness action (propose|accept|record-failure)",
+        help="Topic/intent/action depending on subcommand",
     )
     parser.add_argument(
         "command_arg2",
         nargs="?",
         default=None,
-        help="Proposal id for harness accept, or failure message for record-failure",
+        help="Secondary arg (proposal id, failure message, replay path)",
     )
     parser.add_argument(
         "--topic",
@@ -300,7 +435,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--approve",
         action="store_true",
-        help="Require human approval before writing a brief",
+        help="Require human approval (brief write / evolve commit+PR)",
     )
     parser.add_argument(
         "--docs",
@@ -317,7 +452,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--limit",
         type=int,
         default=20,
-        help="Max failures to mine for harness propose",
+        help="Max failures/events to list",
     )
     parser.add_argument(
         "--agent-id",
@@ -334,6 +469,22 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Skip pytest gate when accepting a harness patch",
     )
+    parser.add_argument(
+        "--auto-merge",
+        action="store_true",
+        help="Phase 2: evolve-worker may merge under MergePolicy after CI",
+    )
+    parser.add_argument("--where", default=None, help="Gene Bank where=prompt|knowledge|runtime|config")
+    parser.add_argument("--why", default=None, help="Gene Bank pathology id")
+    parser.add_argument("--model-id", default=None, help="Model id for Gene Bank cell")
+    parser.add_argument("--summary", default=None, help="Gene Bank cell summary")
+    parser.add_argument("--sample-score", type=float, default=None, help="Child sample score")
+    parser.add_argument("--parent-score", type=float, default=None, help="Parent score")
+    parser.add_argument("--min-gain", type=float, default=0.0, help="Min gain for screening")
+    parser.add_argument("--infra-fail", action="store_true", help="Simulate infra fail in screen")
+    parser.add_argument("--no-activation", action="store_true", help="Simulate no activation")
+    parser.add_argument("--unstable", action="store_true", help="Simulate unstable repeats")
+    parser.add_argument("--event-name", default=None, help="Filter ops events by name")
     parser.add_argument("--host", default="localhost", help="WebSocket host")
     parser.add_argument("--port", type=int, default=8765, help="WebSocket port")
     parser.add_argument("-v", "--verbose", action="store_true", help="Debug logging")
@@ -379,6 +530,27 @@ def main(argv: list[str] | None = None) -> None:
                     raise ValueError("record-failure requires a message")
                 args.message = args.command_arg2 or args.topic or ""
             _run_harness_command(args)
+        elif args.command == "evolve":
+            intent = args.topic or args.command_arg
+            if not intent:
+                raise ValueError('evolve requires an intent: ai-agent evolve "…"')
+            asyncio.run(
+                _run_evolve(
+                    intent,
+                    config_path=args.config,
+                    require_approval=args.approve,
+                )
+            )
+        elif args.command == "evolve-worker":
+            _run_evolve_worker(auto_merge=args.auto_merge)
+        elif args.command == "harness-bank":
+            if not args.command_arg:
+                raise ValueError("harness-bank requires: list | screen | compare")
+            _run_harness_bank(args)
+        elif args.command == "ops":
+            if not args.command_arg:
+                raise ValueError("ops requires: events | replay <path>")
+            _run_ops(args)
         elif args.multi_agent:
             asyncio.run(_run_multi_agent(args.coordinator_config, args.researcher_config))
         elif args.server:

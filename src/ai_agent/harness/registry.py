@@ -88,3 +88,34 @@ class ToolRegistry:
                 output="",
                 error=str(exc),
             )
+
+    def _is_parallel_safe(self, name: str) -> bool:
+        tool = self._tools.get(name)
+        if tool is None:
+            return True
+        return bool(getattr(tool, "parallel_safe", True))
+
+    async def execute_many(
+        self,
+        calls: list[tuple[str, dict[str, object]]],
+    ) -> list[ToolResult]:
+        """
+        Execute tool calls concurrently when all are parallel-safe.
+
+        Any HITL / ordered tool (``parallel_safe=False``) forces sequential
+        execution so stdin approvals and publish steps do not race.
+        """
+        import asyncio
+
+        if not calls:
+            return []
+        if any(not self._is_parallel_safe(name) for name, _ in calls):
+            results: list[ToolResult] = []
+            for name, args in calls:
+                results.append(await self.execute(name, args))
+            return results
+        return list(
+            await asyncio.gather(
+                *[self.execute(name, args) for name, args in calls],
+            )
+        )

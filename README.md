@@ -51,7 +51,12 @@ Everything below is **deterministic software around the model** (OpenRouter toda
 | **HITL approvals** | Done | `request_approval` tool + optional `brief --approve` (console Y/n) | [`tools/request_approval.py`](src/ai_agent/tools/request_approval.py) · [`adapters/approval.py`](src/ai_agent/adapters/approval.py) |
 | **Code execution** | Done | `run_python` — subprocess + AST deny-list (not full container sandbox) | [`tools/run_python.py`](src/ai_agent/tools/run_python.py) · [`harness/python_guard.py`](src/ai_agent/harness/python_guard.py) |
 | **Self-Harness (experimental)** | Scaffold | Mine failures → propose YAML patches → human `accept` after pytest | [`features/self_harness`](src/ai_agent/features/self_harness/service.py) |
-| **Context compaction** | — | Full history in window today | Roadmap |
+| **Context compaction** | Done | Summarize older turns under a char budget; keep full history in state | [`harness/compaction.py`](src/ai_agent/harness/compaction.py) |
+| **Runtime graph** | Done | `AgentFactory`, `spawn_agent`, depth/child budgets, async `execute_many` | [`orchestration/`](src/ai_agent/orchestration/) · [`harness/registry.py`](src/ai_agent/harness/registry.py) |
+| **Self-Evolving Engineer** | Done (HITL) | `evolve` → plan/patch/checks → approve → commit → PR | [`features/evolve`](src/ai_agent/features/evolve/) · [`config/agents/engineer.yaml`](config/agents/engineer.yaml) |
+| **HarnessBank Gene Bank** | Done (v1) | `(where)×(why)` cells + gated screening stubs; evolver ≠ task agent | [`features/harness_bank`](src/ai_agent/features/harness_bank/) |
+| **Organism worker (Phase 2)** | Done | CI wait, `MergePolicy`, file scheduler, STOP kill switch | [`features/evolve/organism.py`](src/ai_agent/features/evolve/organism.py) |
+| **Ops metrics** | Done (log) | JSONL `OpsEvent`, replay/compare hooks | [`harness/ops_metrics.py`](src/ai_agent/harness/ops_metrics.py) |
 | **OS / container sandbox** | — | Scoped limits only (not Docker/Firecracker) | Roadmap |
 
 **Model (not harness):** whatever you set in YAML (`openai/gpt-4o-mini`, etc.) via OpenRouter.
@@ -64,9 +69,9 @@ Everything below is **deterministic software around the model** (OpenRouter toda
 src/ai_agent/
 ├── domain/           # models, ConversationState, Tool protocol, ports
 ├── harness/          # Agent, ReAct loop, ToolRegistry, guards
-├── features/         # brief, self_harness (product use-cases)
-├── adapters/         # OpenRouter, SQLite, Chroma, DuckDuckGo, FS, WebSocket
-├── orchestration/    # multi-agent runtime (inbox / outbox / ask)
+├── features/         # brief, self_harness, evolve, harness_bank
+├── adapters/         # OpenRouter, SQLite, Chroma, DuckDuckGo, FS, git, gh, WebSocket
+├── orchestration/    # multi-agent runtime + AgentFactory / spawn
 ├── tools/            # agent-facing tools over ports
 ├── support/          # shared helpers (console I/O)
 └── entrypoints/      # CLI composition root
@@ -75,19 +80,19 @@ src/ai_agent/
 ```text
                   ┌─────────────────────────────────────────┐
   User / WS  ───► │  AgentRuntime (orchestration)           │
-                  │    inbox → Agent.step → outbox          │
+                  │    inbox → Agent.step → outbox / spawn  │
                   └───────────────┬─────────────────────────┘
                                   │
                   ┌───────────────▼─────────────────────────┐
                   │  Harness loop (application)             │
-                  │  decide → ToolRegistry → observe        │
+                  │  decide → ToolRegistry (gather) → obs   │
                   └───────┬─────────────────────┬───────────┘
                           │                     │
                  LLMPort (model)         tools → ports → infra
-                 OpenRouter              search / FS / memory / RAG
+                 OpenRouter              search / FS / git / PR / RAG
 ```
 
-Dependency rule: **inward only**. The loop depends on protocols, never on httpx/Chroma/SQLite directly. See [DECISIONS.md](DECISIONS.md).
+Dependency rule: **inward only**. The loop depends on protocols, never on httpx/Chroma/SQLite directly. See [DECISIONS.md](DECISIONS.md). Marketing line: **Agent = Model + Harness—and the harness can evolve under proof.**
 
 ---
 
@@ -120,6 +125,10 @@ ai-agent -c config/agent_config.yaml
 | Research operator | `uv run ai-agent -c config/agents/operator.yaml` | Interactive Research Desk |
 | One-shot brief | `uv run ai-agent brief "agent harness"` | Writes `briefs/YYYYMMDD_slug.md` |
 | Brief + approve | `uv run ai-agent brief "topic" --approve` | Console Y/n before write |
+| **Evolve (engineer)** | `uv run ai-agent evolve "…" --approve` | HITL patch → checks → PR |
+| Evolve worker | `uv run ai-agent evolve-worker [--auto-merge]` | Phase 2 organism tick |
+| HarnessBank | `uv run ai-agent harness-bank list\|screen\|compare` | Gene Bank + screening |
+| Ops | `uv run ai-agent ops events` / `ops replay <path>` | Metrics + trace replay |
 | WebSocket | `uv run ai-agent --server -v` then `websocat ws://localhost:8765` | Chat-style plain text replies |
 | Docker WebSocket | `docker compose up --build` then `websocat ws://localhost:8765` | Agent runs in container; terminal client on host |
 | Multi-agent | `uv run ai-agent --multi-agent -v` | Coordinator + researcher handoff |
@@ -165,6 +174,23 @@ uv run ai-agent harness propose
 uv run ai-agent harness accept patch_… -c config/agents/operator.yaml
 ```
 
+Upgrade path: **HarnessBank** Gene Bank + gated screening (`harness-bank screen`) and the **Self-Evolving Engineer** (`evolve`) for code PRs under PathPolicy. See [HarnessBank (arXiv:2607.13683)](https://arxiv.org/abs/2607.13683).
+
+---
+
+## Self-Evolving Engineer
+
+```bash
+uv run ai-agent evolve "add PathPolicy unit tests" --approve
+# → .ai_agent/evolve/<run_id>/{run.json,plan.md,result.json}
+# → branch + PR after local checks (human merges)
+
+uv run ai-agent evolve-worker              # schedule next wake; respect STOP
+uv run ai-agent evolve-worker --auto-merge # Phase 2: CI + MergePolicy only
+```
+
+Touch `.ai_agent/evolve/STOP` to halt forever-loops.
+
 ---
 
 ## Built-in tools
@@ -174,6 +200,12 @@ uv run ai-agent harness accept patch_… -c config/agents/operator.yaml
 | `web_search` | DuckDuckGo search (titles, URLs, snippets) |
 | `http_get` | Fetch http(s) page text (timeout + size cap) |
 | `workspace_search` | Search / read files under `workspace_root` |
+| `workspace_list` | List paths (engineer) |
+| `apply_patch` | Unified diff under PathPolicy |
+| `run_checks` | pytest / ruff / mypy presets |
+| `git_status` / `git_diff` / `git_commit` | Git survey + approved commit |
+| `open_pull_request` | Push branch + `gh pr create` (approved) |
+| `spawn_agent` | Dynamic role spawn with depth/child budgets |
 | `retrieve` | Semantic search over ingested docs (Chroma) |
 | `memory` | Durable key/value facts (SQLite) |
 | `calculator` | Safe AST arithmetic |
@@ -210,6 +242,11 @@ tools:
   - workspace_search
   - memory
   - retrieve
+compaction:
+  enabled: true
+  max_context_chars: 48000
+  keep_recent_messages: 12
+  max_summary_chars: 4000
 ```
 
 Multi-agent personas live under [`config/agents/`](config/agents/).
@@ -289,6 +326,8 @@ docker compose run --service-ports agent \
 ---
 
 ## Quality bar
+
+Tests mirror source packages under `tests/` (`domain/`, `harness/`, `features/`, …). See [AGENTS.md](AGENTS.md).
 
 ```bash
 uv run pytest

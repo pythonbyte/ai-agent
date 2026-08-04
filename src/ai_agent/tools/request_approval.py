@@ -26,6 +26,7 @@ class RequestApprovalTool(BaseTool):
                     required=True,
                 ),
             ],
+            parallel_safe=False,
         )
         self._gate = gate
 
