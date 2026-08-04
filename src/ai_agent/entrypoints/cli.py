@@ -80,6 +80,8 @@ _ENGINEER_TOOL_NAMES = frozenset(
     {
         "workspace_list",
         "apply_patch",
+        "write_file",
+        "replace_in_file",
         "run_checks",
         "git_status",
         "git_diff",
@@ -278,6 +280,8 @@ def _run_harness_command(args: argparse.Namespace) -> None:
 
 
 async def _run_evolve(intent: str, *, config_path: Path, require_approval: bool) -> None:
+    # Default: AutoApprovalGate — branch/commit/push/PR without prompts.
+    # Pass --approve only when you want ConsoleApprovalGate (HITL).
     gate: ApprovalGate
     if require_approval:
         gate = ConsoleApprovalGate()
@@ -300,6 +304,8 @@ async def _run_evolve(intent: str, *, config_path: Path, require_approval: bool)
         print(f"PR: {run.pr_url}")
     if run.error:
         print(f"Error: {run.error}", file=sys.stderr)
+    if run.status != "done" or not run.pr_url:
+        raise SystemExit(1)
 
 
 def _run_evolve_worker(*, auto_merge: bool) -> None:
@@ -435,7 +441,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--approve",
         action="store_true",
-        help="Require human approval (brief write / evolve commit+PR)",
+        help=(
+            "HITL only: ask Y/n before brief write or evolve commit+PR. "
+            "Default evolve auto-creates branch, commits touched files, pushes, opens PR."
+        ),
     )
     parser.add_argument(
         "--docs",

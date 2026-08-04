@@ -1,7 +1,9 @@
 # ai-agent
 
-**A typed agent harness for tool-using LLMs.**
+**A typed, self-evolving agent harness for tool-using LLMs.**
 
+> **This is a self-evolving agent:** it can inspect the repository, make scoped improvements, run checks, and propose changes as pull requests.
+>
 > **Agent = Model + Harness**  
 > The model reasons. This repository is the harness: the loop, tools, memory, retrieval, guardrails, and multi-agent runtime that turn a chat completion into a reliable agent.
 
@@ -53,7 +55,8 @@ Everything below is **deterministic software around the model** (OpenRouter toda
 | **Self-Harness (experimental)** | Scaffold | Mine failures → propose YAML patches → human `accept` after pytest | [`features/self_harness`](src/ai_agent/features/self_harness/service.py) |
 | **Context compaction** | Done | Summarize older turns under a char budget; keep full history in state | [`harness/compaction.py`](src/ai_agent/harness/compaction.py) |
 | **Runtime graph** | Done | `AgentFactory`, `spawn_agent`, depth/child budgets, async `execute_many` | [`orchestration/`](src/ai_agent/orchestration/) · [`harness/registry.py`](src/ai_agent/harness/registry.py) |
-| **Self-Evolving Engineer** | Done (HITL) | `evolve` → plan/patch/checks → approve → commit → PR | [`features/evolve`](src/ai_agent/features/evolve/) · [`config/agents/engineer.yaml`](config/agents/engineer.yaml) |
+| **Self-Evolving Engineer** | Done | `evolve` → plan/patch/checks → scoped commit → push → PR (optional `--approve` HITL) | [`features/evolve`](src/ai_agent/features/evolve/) · [`config/agents/engineer.yaml`](config/agents/engineer.yaml) |
+- Evolve artifacts live under `.ai_agent/evolve/<run_id>/`.
 | **HarnessBank Gene Bank** | Done (v1) | `(where)×(why)` cells + gated screening stubs; evolver ≠ task agent | [`features/harness_bank`](src/ai_agent/features/harness_bank/) |
 | **Organism worker (Phase 2)** | Done | CI wait, `MergePolicy`, file scheduler, STOP kill switch | [`features/evolve/organism.py`](src/ai_agent/features/evolve/organism.py) |
 | **Ops metrics** | Done (log) | JSONL `OpsEvent`, replay/compare hooks | [`harness/ops_metrics.py`](src/ai_agent/harness/ops_metrics.py) |
@@ -125,7 +128,7 @@ ai-agent -c config/agent_config.yaml
 | Research operator | `uv run ai-agent -c config/agents/operator.yaml` | Interactive Research Desk |
 | One-shot brief | `uv run ai-agent brief "agent harness"` | Writes `briefs/YYYYMMDD_slug.md` |
 | Brief + approve | `uv run ai-agent brief "topic" --approve` | Console Y/n before write |
-| **Evolve (engineer)** | `uv run ai-agent evolve "…" --approve` | HITL patch → checks → PR |
+| **Evolve (engineer)** | `uv run ai-agent evolve "…"` | Auto branch → commit → push → PR (`--approve` = HITL) |
 | Evolve worker | `uv run ai-agent evolve-worker [--auto-merge]` | Phase 2 organism tick |
 | HarnessBank | `uv run ai-agent harness-bank list\|screen\|compare` | Gene Bank + screening |
 | Ops | `uv run ai-agent ops events` / `ops replay <path>` | Metrics + trace replay |
@@ -181,7 +184,8 @@ Upgrade path: **HarnessBank** Gene Bank + gated screening (`harness-bank screen`
 ## Self-Evolving Engineer
 
 ```bash
-uv run ai-agent evolve "add PathPolicy unit tests" --approve
+uv run ai-agent evolve "add PathPolicy unit tests"
+# optional HITL: add --approve
 # → .ai_agent/evolve/<run_id>/{run.json,plan.md,result.json}
 # → branch + PR after local checks (human merges)
 

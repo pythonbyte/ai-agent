@@ -100,7 +100,7 @@ Survivors are expected on the first baseline — many are equivalent mutations (
 
 **Thesis:** \(A_H = M \circ H\) with **M frozen**; only **H** evolves under verification ([HarnessBank](https://arxiv.org/abs/2607.13683)).
 
-**Chose HITL PR for Phase 1.** `ai-agent evolve` runs the engineer persona: survey → plan → `apply_patch` → `run_checks` → approve → commit → PR. Humans merge. PathPolicy jail blocks `.env`, `.git/`, and kernel modules (`path_policy`, platform merge surfaces).
+**Chose auto-publish PR for evolve (HITL optional).** `ai-agent evolve` runs the engineer persona: survey → plan → edit → `run_checks` → scoped commit → push → PR. Default uses `AutoApprovalGate`; pass `--approve` for console Y/n. Humans still merge on GitHub. PathPolicy jail blocks `.env`, `.git/`, and kernel modules (`path_policy`, platform merge surfaces). Commit scopes to TouchTracker paths only.
 
 **Chose separate evolver ≠ task agent.** Gene Bank cells live under `.ai_agent/gene_bank/(where)__(why)/` with gated screening (validity → activation → significance → gain). Kernel \(K\) (policies, STOP, screening) is immutable to the evolver; surface \(X\) (prompts, YAML budgets) is mutable.
 

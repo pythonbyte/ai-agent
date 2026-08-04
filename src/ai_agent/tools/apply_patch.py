@@ -6,15 +6,21 @@ from typing import Any
 
 from ai_agent.domain.ports import WorkspaceWriter
 from ai_agent.domain.tool import BaseTool, ToolParameter, ToolResult
+from ai_agent.harness.touch_tracker import TouchTracker
 
 
 class ApplyPatchTool(BaseTool):
-    def __init__(self, writer: WorkspaceWriter) -> None:
+    def __init__(
+        self,
+        writer: WorkspaceWriter,
+        tracker: TouchTracker | None = None,
+    ) -> None:
         super().__init__(
             name="apply_patch",
             description=(
                 "Apply a unified git-style diff to allowlisted paths. "
-                "Prefer this over free-form writes."
+                "Context lines must match the file EXACTLY. "
+                "If this fails twice, use write_file instead."
             ),
             parameters=[
                 ToolParameter(
@@ -26,6 +32,7 @@ class ApplyPatchTool(BaseTool):
             ],
         )
         self._writer = writer
+        self._tracker = tracker
 
     async def execute(self, arguments: dict[str, Any]) -> ToolResult:
         patch = str(arguments.get("patch") or "")
@@ -45,6 +52,8 @@ class ApplyPatchTool(BaseTool):
                 output="",
                 error=str(exc),
             )
+        if self._tracker is not None:
+            self._tracker.record_many(touched)
         return ToolResult(
             tool_name=self.name,
             success=True,

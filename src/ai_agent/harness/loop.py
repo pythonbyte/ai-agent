@@ -17,6 +17,16 @@ from ai_agent.harness.registry import ToolRegistry
 
 logger = logging.getLogger(__name__)
 
+# Keep tool observations small so compaction is not constantly thrashing.
+MAX_TOOL_OBSERVATION_CHARS = 3_000
+EDIT_TOOLS = frozenset({"replace_in_file", "write_file", "apply_patch"})
+
+
+def _truncate_observation(text: str, limit: int = MAX_TOOL_OBSERVATION_CHARS) -> str:
+    if len(text) <= limit:
+        return text
+    return text[: limit - 20] + "\n...[truncated]..."
+
 T = TypeVar("T", bound=BaseModel)
 
 
@@ -116,6 +126,7 @@ async def run_tool_loop(
 
     packer: ContextPacker = context_packer or SummarizingCompactor(llm)
     collected: list[ToolResult] = []
+    consecutive_fails: dict[str, int] = {}
 
     for rounds in range(1, config.max_tool_rounds + 1):
         logger.info("agent_loop round=%s", rounds)
@@ -140,12 +151,18 @@ async def run_tool_loop(
             for result in results:
                 collected.append(result)
                 state.tool_traces.append(result)
+                if result.success:
+                    consecutive_fails[result.tool_name] = 0
+                else:
+                    consecutive_fails[result.tool_name] = (
+                        consecutive_fails.get(result.tool_name, 0) + 1
+                    )
                 observations.append(
                     json.dumps(
                         {
                             "tool": result.tool_name,
                             "success": result.success,
-                            "output": result.output,
+                            "output": _truncate_observation(result.output or ""),
                             "error": result.error,
                         }
                     )
@@ -156,10 +173,81 @@ async def run_tool_loop(
                     result.success,
                 )
 
+            edit_successes = sum(
+                1 for r in collected if r.tool_name in EDIT_TOOLS and r.success
+            )
+            verified = any(
+                r.tool_name in {"git_diff", "run_checks", "git_commit", "open_pull_request"}
+                and r.success
+                for r in collected
+            )
+            if edit_successes >= 1 and not verified:
+                observations.append(
+                    json.dumps(
+                        {
+                            "harness_hint": (
+                                "Edit already succeeded. Do NOT call replace_in_file/"
+                                "write_file/apply_patch again. Next: git_diff, then "
+                                "run_checks, then git_commit, then open_pull_request."
+                            )
+                        }
+                    )
+                )
+
+            stuck = [
+                name
+                for name, count in consecutive_fails.items()
+                if count >= 3
+                and name in {"apply_patch", "write_file", "run_checks", "replace_in_file"}
+            ]
+            if stuck:
+                hint = (
+                    f"Harness circuit-breaker: {stuck[0]} failed "
+                    f"{consecutive_fails[stuck[0]]} times in a row. "
+                    "Do NOT retry the same failing call. "
+                    "Use a different approach or move to verify/publish if an edit "
+                    "already landed."
+                )
+                observations.append(json.dumps({"harness_hint": hint}))
+                logger.warning("tool_circuit_breaker tools=%s", stuck)
+
             state.add_message("assistant", decision.model_dump_json())
-            # Stored as domain role "tool"; as_chat_dicts() maps to user for the API.
             tool_label = decision.tool_calls[0].name if len(decision.tool_calls) == 1 else "tools"
             state.add_message("tool", "\n".join(observations), tool_name=tool_label)
+
+            # Stop re-editing loops: two successful edits without verify/publish.
+            if edit_successes >= 2 and not verified:
+                msg = (
+                    "Stopping edit loop: changes already applied. "
+                    "Next turn must git_diff → run_checks → git_commit → open_pull_request."
+                )
+                state.add_message("assistant", msg)
+                logger.warning("edit_loop_breaker edit_successes=%s", edit_successes)
+                return StepResult(
+                    message=msg,
+                    kind="respond",
+                    tool_results=[r.model_dump() for r in collected],
+                    rounds_used=rounds,
+                )
+
+            hard = [
+                name
+                for name, count in consecutive_fails.items()
+                if count >= 5 and name == "apply_patch"
+            ]
+            if hard:
+                msg = (
+                    "Stopping: apply_patch failed 5 times without progress. "
+                    "Use replace_in_file on the next turn, or abandon this edit."
+                )
+                state.add_message("assistant", msg)
+                logger.warning("tool_circuit_breaker_stop tool=apply_patch")
+                return StepResult(
+                    message=msg,
+                    kind="respond",
+                    tool_results=[r.model_dump() for r in collected],
+                    rounds_used=rounds,
+                )
             continue
 
         message = decision.message or ("Conversation complete." if decision.kind == "done" else "")

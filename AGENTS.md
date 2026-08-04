@@ -104,7 +104,8 @@ compaction:
 uv sync --all-extras
 uv run ai-agent -c config/agent_config.yaml
 uv run ai-agent brief "topic"
-uv run ai-agent evolve "add typed logging helpers" --approve
+uv run ai-agent evolve "add typed logging helpers"
+# optional HITL gate: add --approve
 uv run ai-agent harness-bank list
 uv run ai-agent --server --host 0.0.0.0
 docker compose up --build   # WebSocket on :8765
